@@ -87,10 +87,20 @@ async function checkKeyFilePermissions(keyPath: string): Promise<Result<void>> {
 
     return ok(undefined);
   } catch (error: unknown) {
-    if (getErrorCode(error) === 'ENOENT') {
+    const errorCode = getErrorCode(error);
+    if (errorCode === 'ENOENT') {
       return err(new AppError(ErrorCode.KEYSTORE_KEY_NOT_FOUND, 'Key was not found.', error));
     }
 
+    if (errorCode === 'EACCES' || errorCode === 'EPERM') {
+      return err(
+        new AppError(
+          ErrorCode.KEYSTORE_PERMISSION_ERROR,
+          'Failed to read key metadata due to insufficient permissions.',
+          error,
+        ),
+      );
+    }
     return err(new AppError(ErrorCode.STORAGE_READ_ERROR, 'Failed to read key metadata.', error));
   }
 }
