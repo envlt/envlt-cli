@@ -19,18 +19,22 @@ function getErrorCode(cause: unknown): string | undefined {
 
 function isPathInsideBase(baseDirectory: string, targetPath: string): boolean {
   const relativePath = path.relative(baseDirectory, targetPath);
-  return relativePath !== '' && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
+  return (
+    relativePath !== '' &&
+    relativePath !== '..' &&
+    !relativePath.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relativePath)
+  );
 }
 
-function resolveWithinBase(baseDirectory: string, inputPath: string): Result<string> {
+function resolveWithinBase(
+  baseDirectory: string,
+  inputPath: string,
+  escapeCode: ErrorCode,
+): Result<string> {
   const absolutePath = path.resolve(baseDirectory, inputPath);
   if (!isPathInsideBase(baseDirectory, absolutePath)) {
-    return err(
-      new AppError(
-        ErrorCode.STORAGE_WRITE_ERROR,
-        'Path escapes configured storage base directory.',
-      ),
-    );
+    return err(new AppError(escapeCode, 'Path escapes configured storage base directory.'));
   }
 
   return ok(absolutePath);
@@ -95,9 +99,10 @@ export function createFilesystemAdapter(baseDirectory: string = process.cwd()): 
 
   async function withResolvedPath<T>(
     inputPath: string,
+    escapeCode: ErrorCode,
     operation: (resolvedPath: string) => Promise<Result<T>>,
   ): Promise<Result<T>> {
-    const resolvedPath = resolveWithinBase(resolvedBaseDirectory, inputPath);
+    const resolvedPath = resolveWithinBase(resolvedBaseDirectory, inputPath, escapeCode);
     if (!resolvedPath.ok) {
       return err(resolvedPath.error);
     }
@@ -107,12 +112,14 @@ export function createFilesystemAdapter(baseDirectory: string = process.cwd()): 
 
   return {
     read: async (inputPath: string): Promise<Result<Buffer>> =>
-      withResolvedPath(inputPath, readFile),
+      withResolvedPath(inputPath, ErrorCode.STORAGE_READ_ERROR, readFile),
     write: async (inputPath: string, data: Buffer): Promise<Result<void>> =>
-      withResolvedPath(inputPath, async (resolvedPath: string) => writeFile(resolvedPath, data)),
+      withResolvedPath(inputPath, ErrorCode.STORAGE_WRITE_ERROR, async (resolvedPath: string) =>
+        writeFile(resolvedPath, data),
+      ),
     exists: async (inputPath: string): Promise<Result<boolean>> =>
-      withResolvedPath(inputPath, existsFile),
+      withResolvedPath(inputPath, ErrorCode.STORAGE_READ_ERROR, existsFile),
     delete: async (inputPath: string): Promise<Result<void>> =>
-      withResolvedPath(inputPath, deleteFile),
+      withResolvedPath(inputPath, ErrorCode.STORAGE_DELETE_ERROR, deleteFile),
   };
 }

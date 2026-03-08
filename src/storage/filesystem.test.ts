@@ -136,15 +136,29 @@ void describe('storage/filesystem', () => {
     assert.equal(code, ErrorCode.STORAGE_DELETE_ERROR);
   });
 
-  void it('does reject traversal attempts outside configured base directory', async () => {
+  void it('does allow dot-prefixed names that begin with two dots inside base directory', async () => {
     const root = createTempDirectory();
     const adapter = createFilesystemAdapter(root);
 
-    const code = expectErr(
+    expectOk(await adapter.write('..env', Buffer.from('value', 'utf8')));
+    const readValue = expectOk(await adapter.read('..env'));
+
+    assert.equal(readValue.toString('utf8'), 'value');
+  });
+
+  void it('does reject traversal attempts with operation-specific error codes', async () => {
+    const root = createTempDirectory();
+    const adapter = createFilesystemAdapter(root);
+
+    const writeCode = expectErr(
       await adapter.write(path.join('..', 'escape.txt'), Buffer.from('x', 'utf8')),
     );
+    const readCode = expectErr(await adapter.read(path.join('..', 'escape.txt')));
+    const deleteCode = expectErr(await adapter.delete(path.join('..', 'escape.txt')));
 
-    assert.equal(code, ErrorCode.STORAGE_WRITE_ERROR);
+    assert.equal(writeCode, ErrorCode.STORAGE_WRITE_ERROR);
+    assert.equal(readCode, ErrorCode.STORAGE_READ_ERROR);
+    assert.equal(deleteCode, ErrorCode.STORAGE_DELETE_ERROR);
   });
 
   void it('does return STORAGE_READ_ERROR when existence check fails with permission error', async () => {

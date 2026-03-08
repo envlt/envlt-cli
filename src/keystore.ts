@@ -159,7 +159,12 @@ export async function listKeys(): Promise<Result<readonly string[]>> {
 
   try {
     const entries = await fs.readdir(resolveKeysDirectory(), { withFileTypes: true });
-    return ok(entries.filter((entry) => entry.isFile()).map((entry) => entry.name));
+    const keyIds = entries
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name)
+      .filter((entryName) => isValidKeyId(entryName));
+
+    return ok(keyIds);
   } catch (error: unknown) {
     if (getErrorCode(error) === 'ENOENT') {
       return ok([]);

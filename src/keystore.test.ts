@@ -254,6 +254,19 @@ void describe('keystore', () => {
     assert.equal(code, ErrorCode.KEYSTORE_PERMISSION_ERROR);
   });
 
+  void it('does exclude non-key filenames from listKeys results', async () => {
+    await fs.mkdir(keysDirectory(), { recursive: true });
+    await fs.chmod(keysDirectory(), KEY_DIRECTORY_MODE);
+
+    await fs.writeFile(keyPathFor('valid_key'), 'ok', 'utf8');
+    await fs.chmod(keyPathFor('valid_key'), KEY_FILE_MODE);
+    await fs.writeFile(keyPathFor('bad.key'), 'ignore', 'utf8');
+    await fs.chmod(keyPathFor('bad.key'), KEY_FILE_MODE);
+
+    const listedKeyIds = expectOk(await listKeys());
+    assert.deepEqual([...listedKeyIds], ['valid_key']);
+  });
+
   void it('does list all saved key IDs', async () => {
     const adapter = createTempAdapter();
     for (const keyId of ['alpha', 'beta_1', 'gamma-2']) {
