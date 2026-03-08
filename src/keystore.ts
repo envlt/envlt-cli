@@ -55,11 +55,17 @@ async function checkKeyDirectoryPermissions(missingIsOk: boolean): Promise<Resul
   try {
     const stats = await fs.stat(resolveKeysDirectory());
     if (!stats.isDirectory()) {
+      if ((stats.mode & FILE_MODE_MASK) === KEY_DIRECTORY_MODE) {
+        return err(
+          new AppError(
+            ErrorCode.STORAGE_READ_ERROR,
+            'Key directory path is not a readable directory.',
+          ),
+        );
+      }
+
       return err(
-        new AppError(
-          ErrorCode.KEYSTORE_PERMISSION_ERROR,
-          'Key directory path is not a directory.',
-        ),
+        new AppError(ErrorCode.KEYSTORE_PERMISSION_ERROR, 'Key directory path is not a directory.'),
       );
     }
     if ((stats.mode & FILE_MODE_MASK) !== KEY_DIRECTORY_MODE) {
