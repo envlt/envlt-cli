@@ -1,5 +1,5 @@
 import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
+import * as assert from 'node:assert/strict';
 
 import { decrypt, encrypt, generateKey } from './crypto.js';
 import { AppError, ErrorCode } from './errors.js';
@@ -12,8 +12,8 @@ function assertAppErrorWithCode(error: unknown, code: ErrorCode): void {
   assert.equal(error.code, code);
 }
 
-describe('crypto', () => {
-  it('does return encrypted string different from input when encrypt is called', () => {
+void describe('crypto', () => {
+  void it('does return encrypted string different from input when encrypt is called', () => {
     const key = generateKey();
     const plaintext = 'hello world';
 
@@ -22,7 +22,7 @@ describe('crypto', () => {
     assert.notEqual(encrypted, plaintext);
   });
 
-  it('does round-trip decrypt(encrypt()) for empty string', () => {
+  void it('does round-trip decrypt(encrypt()) for empty string', () => {
     const key = generateKey();
     const plaintext = '';
 
@@ -32,7 +32,7 @@ describe('crypto', () => {
     assert.equal(decrypted, plaintext);
   });
 
-  it('does round-trip decrypt(encrypt()) for unicode string', () => {
+  void it('does round-trip decrypt(encrypt()) for unicode string', () => {
     const key = generateKey();
     const plaintext = 'こんにちは🌍 — café — 🚀';
 
@@ -42,7 +42,7 @@ describe('crypto', () => {
     assert.equal(decrypted, plaintext);
   });
 
-  it('does round-trip decrypt(encrypt()) for 10KB string', () => {
+  void it('does round-trip decrypt(encrypt()) for 10KB string', () => {
     const key = generateKey();
     const plaintext = 'a'.repeat(10 * 1024);
 
@@ -52,7 +52,7 @@ describe('crypto', () => {
     assert.equal(decrypted, plaintext);
   });
 
-  it('does produce different ciphertexts for same plaintext and key due to random IV', () => {
+  void it('does produce different ciphertexts for same plaintext and key due to random IV', () => {
     const key = generateKey();
     const plaintext = 'same input';
 
@@ -62,7 +62,7 @@ describe('crypto', () => {
     assert.notEqual(encryptedOne, encryptedTwo);
   });
 
-  it('does throw CRYPTO_DECRYPT_FAILED when decrypting with wrong key', () => {
+  void it('does throw CRYPTO_DECRYPT_FAILED when decrypting with wrong key', () => {
     const key = generateKey();
     const wrongKey = generateKey();
     const encrypted = encrypt('secret', key);
@@ -78,11 +78,17 @@ describe('crypto', () => {
     );
   });
 
-  it('does throw CRYPTO_DECRYPT_FAILED when ciphertext is tampered', () => {
+  void it('does throw CRYPTO_DECRYPT_FAILED when ciphertext is tampered', () => {
     const key = generateKey();
     const encrypted = encrypt('secret', key);
     const combined = Buffer.from(encrypted, 'base64');
-    combined[combined.length - 1] = combined[combined.length - 1] ^ 0x01;
+    const lastByte = combined.at(-1);
+
+    if (lastByte === undefined) {
+      throw new Error('Expected encrypted payload to contain at least 1 byte.');
+    }
+
+    combined[combined.length - 1] = lastByte ^ 0x01;
     const tampered = combined.toString('base64');
 
     assert.throws(
@@ -96,7 +102,7 @@ describe('crypto', () => {
     );
   });
 
-  it('does throw CRYPTO_DECRYPT_FAILED when decrypting empty string', () => {
+  void it('does throw CRYPTO_DECRYPT_FAILED when decrypting empty string', () => {
     const key = generateKey();
 
     assert.throws(
@@ -110,7 +116,7 @@ describe('crypto', () => {
     );
   });
 
-  it('does throw CRYPTO_DECRYPT_FAILED when decrypting truncated ciphertext', () => {
+  void it('does throw CRYPTO_DECRYPT_FAILED when decrypting truncated ciphertext', () => {
     const key = generateKey();
     const encrypted = encrypt('secret', key);
     const combined = Buffer.from(encrypted, 'base64');
@@ -127,21 +133,21 @@ describe('crypto', () => {
     );
   });
 
-  it('does return a 64-char hex string from generateKey', () => {
+  void it('does return a 64-char hex string from generateKey', () => {
     const key = generateKey();
 
     assert.match(key, /^[0-9a-f]{64}$/i);
     assert.equal(key.length, 64);
   });
 
-  it('does return distinct keys when generateKey called twice', () => {
+  void it('does return distinct keys when generateKey called twice', () => {
     const keyOne = generateKey();
     const keyTwo = generateKey();
 
     assert.notEqual(keyOne, keyTwo);
   });
 
-  it('does throw CRYPTO_INVALID_KEY when encrypting with 63-char key', () => {
+  void it('does throw CRYPTO_INVALID_KEY when encrypting with 63-char key', () => {
     const invalidKey = 'a'.repeat(63);
 
     assert.throws(
@@ -155,7 +161,7 @@ describe('crypto', () => {
     );
   });
 
-  it('does throw CRYPTO_INVALID_KEY when decrypting with non-hex key', () => {
+  void it('does throw CRYPTO_INVALID_KEY when decrypting with non-hex key', () => {
     const invalidKey = 'z'.repeat(64);
 
     assert.throws(
