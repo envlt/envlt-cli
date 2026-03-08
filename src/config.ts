@@ -174,5 +174,18 @@ export async function writeConfig(
   const configPath = path.resolve(projectRoot, CONFIG_FILE_NAME);
   const serialized = `${JSON.stringify(validated.value, null, 2)}\n`;
 
-  return adapter.write(configPath, Buffer.from(serialized, 'utf8'));
+  try {
+    return await adapter.write(configPath, Buffer.from(serialized, 'utf8'));
+  } catch (error: unknown) {
+    if (error instanceof AppError) {
+      return err(error);
+    }
+
+    return err(
+      new AppError(
+        ErrorCode.STORAGE,
+        'Failed to write envlt.config.json.',
+      ),
+    );
+  }
 }
