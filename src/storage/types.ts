@@ -1,8 +1,8 @@
 import type { Result } from '../result.js';
 
-export interface StorageAdapter {
-  read(path: string): Promise<Result<Buffer>>;
-  write(path: string, data: Buffer): Promise<Result<void>>;
-  exists(path: string): Promise<boolean>;
-  delete(path: string): Promise<Result<void>>;
-}
+export type StorageAdapter = {
+  readonly read: (path: string) => Promise<Result<Buffer>>;
+  readonly write: (path: string, data: Buffer) => Promise<Result<void>>;
+  readonly exists: (path: string) => Promise<Result<boolean>>;
+  readonly delete: (path: string) => Promise<Result<void>>;
+};

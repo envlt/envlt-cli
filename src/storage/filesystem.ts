@@ -8,8 +8,32 @@ import type { StorageAdapter } from './types.js';
 
 const FILE_MODE = 0o600;
 
-function resolvePath(inputPath: string): string {
-  return path.resolve(inputPath);
+function getErrorCode(cause: unknown): string | undefined {
+  if (!(cause instanceof Error) || !('code' in cause)) {
+    return undefined;
+  }
+
+  const { code } = cause;
+  return typeof code === 'string' ? code : undefined;
+}
+
+function isPathInsideBase(baseDirectory: string, targetPath: string): boolean {
+  const relativePath = path.relative(baseDirectory, targetPath);
+  return relativePath !== '' && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
+}
+
+function resolveWithinBase(baseDirectory: string, inputPath: string): Result<string> {
+  const absolutePath = path.resolve(baseDirectory, inputPath);
+  if (!isPathInsideBase(baseDirectory, absolutePath)) {
+    return err(
+      new AppError(
+        ErrorCode.STORAGE_WRITE_ERROR,
+        'Path escapes configured storage base directory.',
+      ),
+    );
+  }
+
+  return ok(absolutePath);
 }
 
 function toStorageReadError(cause: unknown): AppError {
@@ -18,6 +42,10 @@ function toStorageReadError(cause: unknown): AppError {
 
 function toStorageWriteError(cause: unknown): AppError {
   return new AppError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to write to storage.', cause);
+}
+
+function toStorageDeleteError(cause: unknown): AppError {
+  return new AppError(ErrorCode.STORAGE_DELETE_ERROR, 'Failed to delete from storage.', cause);
 }
 
 async function readFile(absolutePath: string): Promise<Result<Buffer>> {
@@ -32,7 +60,7 @@ async function writeFile(absolutePath: string, data: Buffer): Promise<Result<voi
   try {
     const directory = path.dirname(absolutePath);
     await fs.mkdir(directory, { recursive: true });
-    await fs.writeFile(absolutePath, data);
+    await fs.writeFile(absolutePath, data, { mode: FILE_MODE });
     await fs.chmod(absolutePath, FILE_MODE);
     return ok(undefined);
   } catch (error: unknown) {
@@ -40,12 +68,16 @@ async function writeFile(absolutePath: string, data: Buffer): Promise<Result<voi
   }
 }
 
-async function existsFile(absolutePath: string): Promise<boolean> {
+async function existsFile(absolutePath: string): Promise<Result<boolean>> {
   try {
     await fs.access(absolutePath);
-    return true;
-  } catch {
-    return false;
+    return ok(true);
+  } catch (error: unknown) {
+    if (getErrorCode(error) === 'ENOENT') {
+      return ok(false);
+    }
+
+    return err(toStorageReadError(error));
   }
 }
 
@@ -54,25 +86,33 @@ async function deleteFile(absolutePath: string): Promise<Result<void>> {
     await fs.rm(absolutePath, { force: true });
     return ok(undefined);
   } catch (error: unknown) {
-    return err(
-      new AppError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to delete from storage.', error),
-    );
+    return err(toStorageDeleteError(error));
   }
 }
 
-export function createFilesystemAdapter(): StorageAdapter {
+export function createFilesystemAdapter(baseDirectory: string = process.cwd()): StorageAdapter {
+  const resolvedBaseDirectory = path.resolve(baseDirectory);
+
+  async function withResolvedPath<T>(
+    inputPath: string,
+    operation: (resolvedPath: string) => Promise<Result<T>>,
+  ): Promise<Result<T>> {
+    const resolvedPath = resolveWithinBase(resolvedBaseDirectory, inputPath);
+    if (!resolvedPath.ok) {
+      return err(resolvedPath.error);
+    }
+
+    return operation(resolvedPath.value);
+  }
+
   return {
-    async read(inputPath: string): Promise<Result<Buffer>> {
-      return readFile(resolvePath(inputPath));
-    },
-    async write(inputPath: string, data: Buffer): Promise<Result<void>> {
-      return writeFile(resolvePath(inputPath), data);
-    },
-    async exists(inputPath: string): Promise<boolean> {
-      return existsFile(resolvePath(inputPath));
-    },
-    async delete(inputPath: string): Promise<Result<void>> {
-      return deleteFile(resolvePath(inputPath));
-    },
+    read: async (inputPath: string): Promise<Result<Buffer>> =>
+      withResolvedPath(inputPath, readFile),
+    write: async (inputPath: string, data: Buffer): Promise<Result<void>> =>
+      withResolvedPath(inputPath, async (resolvedPath: string) => writeFile(resolvedPath, data)),
+    exists: async (inputPath: string): Promise<Result<boolean>> =>
+      withResolvedPath(inputPath, existsFile),
+    delete: async (inputPath: string): Promise<Result<void>> =>
+      withResolvedPath(inputPath, deleteFile),
   };
 }
