@@ -161,21 +161,16 @@ void describe('storage/filesystem', () => {
     assert.equal(deleteCode, ErrorCode.STORAGE_DELETE_ERROR);
   });
 
-  void it('does return STORAGE_READ_ERROR when existence check fails with permission error', async () => {
+  void it('does return STORAGE_READ_ERROR when existence check receives invalid path', async () => {
     const root = createTempDirectory();
     const adapter = createFilesystemAdapter(root);
 
-    await fs.mkdir(path.join(root, 'no-access'), { recursive: true, mode: 0o000 });
+    const existsResult = await adapter.exists('bad\0path');
 
-    const existsResult = await adapter.exists(path.join('no-access', 'file.txt'));
-
-    await fs.chmod(path.join(root, 'no-access'), 0o700);
-
-    if (!existsResult.ok) {
-      assert.equal(existsResult.error.code, ErrorCode.STORAGE_READ_ERROR);
-      return;
+    if (existsResult.ok) {
+      assert.fail('Expected exists() to fail for invalid path.');
     }
 
-    assert.equal(existsResult.value, false);
+    assert.equal(existsResult.error.code, ErrorCode.STORAGE_READ_ERROR);
   });
 });

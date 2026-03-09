@@ -30,17 +30,22 @@ async function runBuild(): Promise<void> {
 async function runCli(
   args: readonly string[],
   env: NodeJS.ProcessEnv,
-): Promise<{ code: number; stdout: string }> {
+): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [DIST_BIN_PATH, ...args], { cwd: projectRoot, env });
     let stdout = '';
+    let stderr = '';
 
     child.stdout.on('data', (chunk: Buffer) => {
       stdout += chunk.toString('utf8');
     });
 
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString('utf8');
+    });
+
     child.on('close', (code: number | null) => {
-      resolve({ code: code ?? -1, stdout });
+      resolve({ code: code ?? -1, stdout, stderr });
     });
   });
 }
@@ -106,5 +111,17 @@ void describe('integration/set-and-use', () => {
     );
     assert.equal(useResult.code, 0);
     assert.equal(useResult.stdout, 'bar|');
+  });
+
+  void it('does fail when set receives invalid key format', async () => {
+    const baseEnv = {
+      ...process.env,
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+    };
+
+    const setResult = await runCli(['set', 'invalid_key=value', '--env', 'test'], baseEnv);
+    assert.notEqual(setResult.code, 0);
+    assert.match(setResult.stderr, /Expected UPPER_SNAKE_CASE format/);
   });
 });
