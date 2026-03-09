@@ -6,6 +6,7 @@ import { Command } from 'commander';
 import { runCheck } from '../src/commands/check.js';
 import { readConfig } from '../src/config.js';
 import { runDeclare } from '../src/commands/declare.js';
+import { runEdit } from '../src/commands/edit.js';
 import { runSet } from '../src/commands/set.js';
 import { runUse } from '../src/commands/use.js';
 import { DEFAULT_ENV, EXIT_CODES } from '../src/constants.js';
@@ -83,6 +84,25 @@ program
       env: opts.env,
       strict: opts.strict,
       ...(opts.keyId !== undefined ? { keyId: opts.keyId } : {}),
+      projectRoot: path.resolve(process.cwd()),
+    });
+
+    if (!result.ok) {
+      logger.error(result.error.message);
+      process.exit(EXIT_CODES.GENERAL_ERROR);
+    }
+  });
+
+program
+  .command('edit')
+  .option('--env <name>', 'Environment name', DEFAULT_ENV)
+  .option('--key-id <id>', 'Override key ID from config')
+  .option('--editor <path>', 'Override editor command')
+  .action(async (opts: { env: string; keyId?: string; editor?: string }) => {
+    const result = await runEdit({
+      env: opts.env,
+      ...(opts.keyId !== undefined ? { keyId: opts.keyId } : {}),
+      ...(opts.editor !== undefined ? { editor: opts.editor } : {}),
       projectRoot: path.resolve(process.cwd()),
     });
 
