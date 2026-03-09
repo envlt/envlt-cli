@@ -80,6 +80,7 @@ beforeEach(async () => {
   delete process.env['VISUAL'];
   delete process.env['ENVLT_CAPTURE_TMP_PATH'];
   delete process.env['ENVLT_CAPTURE_TMP_MODE'];
+  process.env['ENVLT_NODE'] = process.execPath;
 });
 
 afterEach(async () => {
@@ -117,6 +118,7 @@ afterEach(async () => {
 
   delete process.env['ENVLT_CAPTURE_TMP_PATH'];
   delete process.env['ENVLT_CAPTURE_TMP_MODE'];
+  process.env['ENVLT_NODE'] = process.execPath;
 
   await fs.rm(projectRoot, { recursive: true, force: true });
   await fs.rm(tempHome, { recursive: true, force: true });
@@ -364,7 +366,7 @@ void describe('commands/edit', () => {
     assert.equal(expectErrorCode(result), ErrorCode.ENVFILE_INVALID_ENV_NAME);
   });
 
-  void it('does return STORAGE_READ_ERROR when editor deletes temp file and does log cleanup warning', async () => {
+  void it('does return STORAGE_READ_ERROR when editor deletes temp file without cleanup warning', async () => {
     await setupFixture();
     const warnStub = sinon.stub(logger, 'warn');
 
@@ -375,7 +377,7 @@ void describe('commands/edit', () => {
     });
 
     assert.equal(expectErrorCode(result), ErrorCode.STORAGE_READ_ERROR);
-    assert.equal(warnStub.calledWith('Warning: failed to remove temporary edit file'), true);
+    assert.equal(warnStub.called, false);
   });
 
   void it('does create env file when no encrypted file exists', async () => {

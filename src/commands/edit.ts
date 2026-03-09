@@ -98,6 +98,15 @@ function splitEditorCommand(command: string): Result<readonly [string, ...string
   return ok([executable, ...tokens.slice(1)]);
 }
 
+function getErrorCode(error: unknown): string | undefined {
+  if (!(error instanceof Error) || !('code' in error)) {
+    return undefined;
+  }
+
+  const { code } = error;
+  return typeof code === 'string' ? code : undefined;
+}
+
 function isEditorNotFoundError(error: unknown): boolean {
   if (!(error instanceof Error) || !('code' in error)) {
     return false;
@@ -124,9 +133,8 @@ function resolveEnvPath(options: EditOptions): Result<string> {
 async function readExistingVars(
   options: EditOptions,
   keyHex: string,
-  deps: EditDeps,
+  adapter: StorageAdapter,
 ): Promise<Result<EnvVars>> {
-  const adapter = deps.createAdapter(options.projectRoot);
   const envPathResult = resolveEnvPath(options);
   if (!envPathResult.ok) {
     return err(envPathResult.error);
@@ -216,7 +224,7 @@ export async function runEdit(
     return err(keyResult.error);
   }
 
-  const varsResult = await readExistingVars(options, keyResult.value, deps);
+  const varsResult = await readExistingVars(options, keyResult.value, adapter);
   if (!varsResult.ok) {
     return err(varsResult.error);
   }
@@ -244,7 +252,6 @@ export async function runEdit(
     const content = await deps.readFile(tempPath, 'utf8');
     const parsed = parseEnv(content);
     if (!parsed.ok) {
-      logger.error(parsed.error.message);
       return err(parsed.error);
     }
 
@@ -272,8 +279,10 @@ export async function runEdit(
   } finally {
     try {
       await deps.unlink(tempPath);
-    } catch {
-      logger.warn(TEMP_DELETE_WARNING);
+    } catch (error: unknown) {
+      if (getErrorCode(error) !== 'ENOENT') {
+        logger.warn(TEMP_DELETE_WARNING);
+      }
     }
   }
 }
