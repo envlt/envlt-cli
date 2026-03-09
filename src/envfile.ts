@@ -8,8 +8,7 @@ import type { StorageAdapter } from './storage/index.js';
 
 export type EnvVars = Readonly<Record<string, string>>;
 
-export type EncEnvFile = {
-  readonly envName: string;
+type EncEnvFile = {
   readonly filePath: string;
 };
 
