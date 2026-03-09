@@ -24,6 +24,7 @@ type FileOps = {
 
 const ASSIGNMENT_SEPARATOR = '=';
 const TEMP_FILE_SUFFIX = '.tmp';
+const ENCRYPTED_ENV_FILE_MODE = 0o600;
 const DEFAULT_FILE_OPS: FileOps = {
   writeFile: fs.writeFile,
   rename: fs.rename,
@@ -103,7 +104,9 @@ async function writeEncEnvAtomically(
   const tmpPath = `${filePath}${TEMP_FILE_SUFFIX}`;
 
   try {
-    await fileOps.writeFile(tmpPath, encrypt(stringifyEnv(vars), keyHex), { mode: 0o600 });
+    await fileOps.writeFile(tmpPath, encrypt(stringifyEnv(vars), keyHex), {
+      mode: ENCRYPTED_ENV_FILE_MODE,
+    });
     await fileOps.rename(tmpPath, filePath);
     return ok(undefined);
   } catch (error: unknown) {

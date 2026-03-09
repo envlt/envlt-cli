@@ -78,7 +78,12 @@ afterEach(async () => {
 
 void describe('integration/set-and-use', () => {
   void it('does run set then use end to end with built binary', async () => {
-    const baseEnv = { ...process.env, HOME: tempHome, ENVLT_KEY: 'sensitive' };
+    const baseEnv = {
+      ...process.env,
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+      ENVLT_KEY: 'sensitive',
+    };
 
     const setResult = await runCli(['set', 'FOO=bar', 'BAZ=qux', '--env', 'test'], baseEnv);
     assert.equal(setResult.code, 0);

@@ -112,7 +112,7 @@ void describe('commands/use', () => {
       "process.stdout.write(process.env.FOO ?? '')",
     ]);
 
-    const result = await runNode(script, { ...process.env, HOME: tempHome });
+    const result = await runNode(script, { ...process.env, HOME: tempHome, USERPROFILE: tempHome });
     assert.equal(result.code, EXIT_CODES.SUCCESS);
     assert.equal(result.stdout, 'bar');
   });
@@ -125,7 +125,12 @@ void describe('commands/use', () => {
       "process.stdout.write(process.env.PARENT_ONLY ?? '')",
     ]);
 
-    const result = await runNode(script, { ...process.env, HOME: tempHome, PARENT_ONLY: 'hidden' });
+    const result = await runNode(script, {
+      ...process.env,
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+      PARENT_ONLY: 'hidden',
+    });
     assert.equal(result.code, EXIT_CODES.SUCCESS);
     assert.equal(result.stdout, '');
   });
@@ -141,7 +146,12 @@ void describe('commands/use', () => {
       true,
     );
 
-    const result = await runNode(script, { ...process.env, HOME: tempHome, PARENT_ONLY: 'seen' });
+    const result = await runNode(script, {
+      ...process.env,
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+      PARENT_ONLY: 'seen',
+    });
     assert.equal(result.stdout, 'seen:bar');
   });
 
@@ -152,7 +162,12 @@ void describe('commands/use', () => {
       true,
     );
 
-    const result = await runNode(script, { ...process.env, HOME: tempHome, FOO: 'parent' });
+    const result = await runNode(script, {
+      ...process.env,
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+      FOO: 'parent',
+    });
     assert.equal(result.stdout, 'bar');
   });
 
@@ -160,15 +175,32 @@ void describe('commands/use', () => {
     await setupFixture();
     const script = createRunUseScript([nodeExec, '-e', 'process.exit(7)']);
 
-    const result = await runNode(script, { ...process.env, HOME: tempHome });
+    const result = await runNode(script, { ...process.env, HOME: tempHome, USERPROFILE: tempHome });
     assert.equal(result.code, 7);
   });
 
   void it('does exit with MISSING_CONFIG when config file is missing', async () => {
     const script = createRunUseScript([nodeExec, '-e', 'process.exit(0)']);
 
-    const result = await runNode(script, { ...process.env, HOME: tempHome });
+    const result = await runNode(script, { ...process.env, HOME: tempHome, USERPROFILE: tempHome });
     assert.equal(result.code, EXIT_CODES.MISSING_CONFIG);
+  });
+
+  void it('does exit with DECRYPTION_FAILED when key cannot be loaded', async () => {
+    const adapter = createFilesystemAdapter(projectRoot);
+    const config: EnvltConfig = { appName: 'envlt', envs: ['test'], keyId: 'missing-key' };
+    const configResult = await writeConfig(config, projectRoot, adapter);
+    if (!configResult.ok) {
+      throw configResult.error;
+    }
+
+    const script = createRunUseScript([nodeExec, '-e', 'process.exit(0)']);
+    const result = await runNode(script, {
+      ...process.env,
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+    });
+    assert.equal(result.code, EXIT_CODES.DECRYPTION_FAILED);
   });
 
   void it('does exit with DECRYPTION_FAILED when env file is missing', async () => {
@@ -186,7 +218,7 @@ void describe('commands/use', () => {
     }
 
     const script = createRunUseScript([nodeExec, '-e', 'process.exit(0)']);
-    const result = await runNode(script, { ...process.env, HOME: tempHome });
+    const result = await runNode(script, { ...process.env, HOME: tempHome, USERPROFILE: tempHome });
     assert.equal(result.code, EXIT_CODES.DECRYPTION_FAILED);
   });
 
@@ -194,7 +226,7 @@ void describe('commands/use', () => {
     await setupFixture();
     const script = createRunUseScript(['__missing_command__']);
 
-    const result = await runNode(script, { ...process.env, HOME: tempHome });
+    const result = await runNode(script, { ...process.env, HOME: tempHome, USERPROFILE: tempHome });
     assert.equal(result.code, EXIT_CODES.CHILD_PROCESS_ERROR);
   });
 });
