@@ -60,18 +60,26 @@ async function readExistingVars(
   keyHex: string,
   projectRoot: string,
 ): Promise<Result<EnvVars>> {
-  const adapter = createFilesystemAdapter(projectRoot);
-  const envPath = path.resolve(projectRoot, encEnvFileName(envName));
-  const existsResult = await adapter.exists(envPath);
-  if (!existsResult.ok) {
-    return err(existsResult.error);
-  }
+  try {
+    const adapter = createFilesystemAdapter(projectRoot);
+    const envPath = path.resolve(projectRoot, encEnvFileName(envName));
+    const existsResult = await adapter.exists(envPath);
+    if (!existsResult.ok) {
+      return err(existsResult.error);
+    }
 
-  if (!existsResult.value) {
-    return ok({});
-  }
+    if (!existsResult.value) {
+      return ok({});
+    }
 
-  return readEncEnv(envName, keyHex, projectRoot, adapter);
+    return await readEncEnv(envName, keyHex, projectRoot, adapter);
+  } catch (error: unknown) {
+    if (error instanceof AppError) {
+      return err(error);
+    }
+
+    return err(new AppError(ErrorCode.STORAGE_READ_ERROR, 'Failed to read env file.', error));
+  }
 }
 
 async function writeEncEnvAtomically(
@@ -81,7 +89,17 @@ async function writeEncEnvAtomically(
   projectRoot: string,
   fileOps: FileOps = DEFAULT_FILE_OPS,
 ): Promise<Result<void>> {
-  const filePath = path.resolve(projectRoot, encEnvFileName(envName));
+  let filePath: string;
+  try {
+    filePath = path.resolve(projectRoot, encEnvFileName(envName));
+  } catch (error: unknown) {
+    if (error instanceof AppError) {
+      return err(error);
+    }
+
+    return err(new AppError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to write env file.', error));
+  }
+
   const tmpPath = `${filePath}${TEMP_FILE_SUFFIX}`;
 
   try {

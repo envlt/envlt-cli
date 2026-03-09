@@ -168,6 +168,14 @@ void describe('commands/set', () => {
     assert.equal(vars['FOO'], 'original');
   });
 
+  void it('does return ENVFILE_INVALID_ENV_NAME when env option is invalid', async () => {
+    expectOk(await saveKey('main', generateKey()));
+    await writeMinimalConfig(projectRoot, 'main');
+
+    const result = await runSet(['FOO=bar'], { env: 'INVALID', projectRoot });
+    assert.equal(expectErrorCode(result), ErrorCode.ENVFILE_INVALID_ENV_NAME);
+  });
+
   void it('does return KEYSTORE_KEY_NOT_FOUND when key does not exist', async () => {
     await writeMinimalConfig(projectRoot, 'missing-key');
 

@@ -164,6 +164,13 @@ void describe('commands/use', () => {
     assert.equal(result.code, 7);
   });
 
+  void it('does exit with MISSING_CONFIG when config file is missing', async () => {
+    const script = createRunUseScript([nodeExec, '-e', 'process.exit(0)']);
+
+    const result = await runNode(script, { ...process.env, HOME: tempHome });
+    assert.equal(result.code, EXIT_CODES.MISSING_CONFIG);
+  });
+
   void it('does exit with DECRYPTION_FAILED when env file is missing', async () => {
     const key = 'f'.repeat(64);
     const adapter = createFilesystemAdapter(projectRoot);
