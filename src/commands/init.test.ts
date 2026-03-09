@@ -175,6 +175,26 @@ void describe('commands/init', () => {
     assert.match(writes.at(0) ?? '', /ENVLT_KEY=/u);
   });
 
+  void it('does generate keyId within 64 characters for long app names', async () => {
+    const longName = 'a'.repeat(64);
+    const writes: string[] = [];
+    const prompter = new FakePrompter([
+      { kind: 'input', value: longName },
+      { kind: 'checkbox', value: ['development'] },
+      { kind: 'input', value: '' },
+      { kind: 'confirm', value: false },
+    ]);
+
+    const result = await runInit({ projectRoot, skipImport: true }, withDeps(prompter, writes));
+    assert.equal(result.ok, true);
+
+    const configValue = expectOk(
+      await readConfig(projectRoot, createFilesystemAdapter(projectRoot)),
+    );
+    assert.equal(configValue.keyId.length, 64);
+    assert.match(configValue.keyId, /^[a-z0-9_-]+-\d{8}$/u);
+  });
+
   void it('does import .env.local values when enabled', async () => {
     await fs.writeFile(
       path.join(projectRoot, '.env.local'),

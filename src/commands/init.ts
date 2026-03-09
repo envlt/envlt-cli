@@ -6,7 +6,7 @@ import { generateGithubActionsWorkflow } from '../ci/github-actions.js';
 import { writeConfig } from '../config.js';
 import { CONFIG_FILE_NAME, ENV_NAME_PATTERN, GITIGNORE_ADDITIONS } from '../constants.js';
 import { generateKey } from '../crypto.js';
-import { parseEnv, writeEncEnv, type EnvVars } from '../envfile.js';
+import { parseEnv, resolveEncEnvPath, writeEncEnv, type EnvVars } from '../envfile.js';
 import { AppError, ErrorCode } from '../errors.js';
 import { loadKey, saveKey } from '../keystore.js';
 import { logger } from '../logger.js';
@@ -17,6 +17,9 @@ const APP_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/u;
 const APP_NAME_MAX_LENGTH = 64;
 const DEFAULT_ENVS = ['development', 'staging', 'production'] as const;
 const KEY_ID_SUFFIX_LENGTH = 8;
+const KEY_ID_MAX_LENGTH = 64;
+const KEY_ID_SEPARATOR_LENGTH = 1;
+const KEY_ID_SLUG_MAX_LENGTH = KEY_ID_MAX_LENGTH - KEY_ID_SUFFIX_LENGTH - KEY_ID_SEPARATOR_LENGTH;
 
 type InitDependencies = {
   readonly prompter: Prompter;
@@ -27,11 +30,11 @@ type InitDependencies = {
   readonly writeStdout: (message: string) => void;
 };
 
-export interface InitOptions {
+export type InitOptions = {
   readonly projectRoot: string;
   readonly force?: boolean;
   readonly skipImport?: boolean;
-}
+};
 
 export interface Prompter {
   confirm(message: string, defaultValue?: boolean): Promise<boolean>;
@@ -102,7 +105,7 @@ function slugifyName(value: string): string {
     .replace(/[^a-z0-9_-]+/gu, '-')
     .replace(/-+/gu, '-')
     .replace(/^-|-$/gu, '')
-    .slice(0, APP_NAME_MAX_LENGTH);
+    .slice(0, KEY_ID_SLUG_MAX_LENGTH);
 }
 
 function buildKeyId(appName: string, now: number): string {
@@ -281,8 +284,12 @@ export async function runInit(
   }
 
   for (const envName of envs) {
-    const encPath = path.resolve(options.projectRoot, `.env.${envName}.enc`);
-    const envExists = await adapter.exists(encPath);
+    const encPathResult = resolveEncEnvPath(envName, options.projectRoot);
+    if (!encPathResult.ok) {
+      return err(encPathResult.error);
+    }
+
+    const envExists = await adapter.exists(encPathResult.value);
     if (!envExists.ok) {
       return err(envExists.error);
     }
