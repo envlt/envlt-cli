@@ -18,8 +18,8 @@ const EMPTY_WARNINGS: readonly string[] = [];
 
 const dictionaryCache = new WeakMap<readonly string[], readonly string[]>();
 
-function suggestionMessage(suggestion: string): string {
-  return `Did you mean ${suggestion}?`;
+function suggestionMessage(key: string, suggestion: string): string {
+  return `Suspicious key "${key}". Did you mean ${suggestion}?`;
 }
 
 function invalidKey(message: string): KeyValidationResult {
@@ -116,7 +116,7 @@ export function validateKey(
   const suggestion = findSuggestion(key, dictionary);
   return suggestion === undefined
     ? { valid: true, warnings: EMPTY_WARNINGS }
-    : { valid: true, warnings: [suggestionMessage(suggestion)] };
+    : { valid: true, warnings: [suggestionMessage(key, suggestion)] };
 }
 
 /**

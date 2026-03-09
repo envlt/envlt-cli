@@ -47,12 +47,12 @@ void describe('validation/keys', () => {
   void it('does warn for close typo against built-in dictionary', () => {
     assert.deepEqual(validateKey('DATBASE_URL'), {
       valid: true,
-      warnings: ['Did you mean DATABASE_URL?'],
+      warnings: ['Suspicious key "DATBASE_URL". Did you mean DATABASE_URL?'],
     });
 
     assert.deepEqual(validateKey('STRIPE_PUBLIK_KEY'), {
       valid: true,
-      warnings: ['Did you mean STRIPE_PUBLIC_KEY?'],
+      warnings: ['Suspicious key "STRIPE_PUBLIK_KEY". Did you mean STRIPE_PUBLIC_KEY?'],
     });
   });
 
@@ -63,14 +63,14 @@ void describe('validation/keys', () => {
     });
     assert.deepEqual(validateKey('MY_CUSTM_VAR', ['MY_CUSTOM_VAR']), {
       valid: true,
-      warnings: ['Did you mean MY_CUSTOM_VAR?'],
+      warnings: ['Suspicious key "MY_CUSTM_VAR". Did you mean MY_CUSTOM_VAR?'],
     });
   });
 
   void it('does ignore invalid custom dictionary entries for suggestions', () => {
     assert.deepEqual(validateKey('MY_CUSTM_VAR', ['my_custom_var', '_BAD', 'MY_CUSTOM_VAR']), {
       valid: true,
-      warnings: ['Did you mean MY_CUSTOM_VAR?'],
+      warnings: ['Suspicious key "MY_CUSTM_VAR". Did you mean MY_CUSTOM_VAR?'],
     });
   });
 
@@ -110,7 +110,7 @@ void describe('validation/keys', () => {
   void it('does choose lexicographically smaller suggestion on equal distance', () => {
     assert.deepEqual(validateKey('AAAA', ['AAAC', 'AAAB']), {
       valid: true,
-      warnings: ['Did you mean AAAB?'],
+      warnings: ['Suspicious key "AAAA". Did you mean AAAB?'],
     });
   });
 
