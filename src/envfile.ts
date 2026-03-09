@@ -104,7 +104,16 @@ export async function readEncEnv(
   }
 
   const file = encEnvFilePath(envName, projectRoot);
-  const readResult = await adapter.read(file.filePath);
+  let readResult;
+  try {
+    readResult = await adapter.read(file.filePath);
+  } catch (error: unknown) {
+    if (error instanceof AppError) {
+      return err(error);
+    }
+
+    return err(new AppError(ErrorCode.STORAGE_READ_ERROR, 'Failed to read env file.', error));
+  }
   if (!readResult.ok) {
     return err(readResult.error);
   }
