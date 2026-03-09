@@ -132,7 +132,7 @@ void describe('commands/declare', { concurrency: false }, () => {
     assert.equal(result.ok, false);
   });
 
-  void it('does return error for invalid key format once validation exists', async () => {
+  void it('does accept invalid key format while validator is a stub', async () => {
     const result = await runDeclare('not-valid', {
       description: 'Invalid key',
       projectRoot,

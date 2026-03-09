@@ -93,10 +93,7 @@ export async function runCheck(
   }
 
   const shouldExitOnFailure = options.exitOnFailure ?? true;
-  const hasMissingRequired = violations.some((violation) => violation.type === 'missing_required');
-  const hasUndeclared = violations.some((violation) => violation.type === 'undeclared');
-
-  if (shouldExitOnFailure && (hasMissingRequired || hasUndeclared)) {
+  if (shouldExitOnFailure) {
     process.exitCode = EXIT_CODES.CHECK_FAILED;
   }
 
