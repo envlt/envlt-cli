@@ -138,6 +138,15 @@ export function parseAssignment(
 
   const key = assignment.slice(0, separatorIndex);
   const value = assignment.slice(separatorIndex + 1);
+
+  if (key === '') {
+    return err(
+      new AppError(
+        ErrorCode.SET_INVALID_ASSIGNMENT,
+        `Invalid assignment "${assignment}". Key cannot be empty.`,
+      ),
+    );
+  }
   const validationResult = validateKey(key, customDictionary);
   if (!validationResult.valid) {
     return err(new AppError(ErrorCode.SET_INVALID_ASSIGNMENT, validationResult.error));
