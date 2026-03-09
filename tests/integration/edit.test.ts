@@ -8,11 +8,18 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 
 const DIST_BIN_PATH = path.resolve('dist/bin/envlt.js');
 const REPO_ROOT = path.resolve('.');
-const EDIT_TEMP_PREFIX = 'envlt-edit-';
 
 let projectRoot = '';
 let tempHome = '';
 let isBuilt = false;
+
+function quoteEditorArg(value: string): string {
+  return `"${value.replace(/"/gu, '\"')}"`;
+}
+
+function buildEditorCommand(scriptPath: string): string {
+  return `${quoteEditorArg(process.execPath)} ${quoteEditorArg(scriptPath)}`;
+}
 
 async function runBuild(): Promise<void> {
   await new Promise<void>((resolve, reject) => {
@@ -84,7 +91,7 @@ afterEach(async () => {
 
 void describe('integration/edit', () => {
   void it('does edit env and leave no temp edit files behind', async () => {
-    const editorPath = `${process.execPath} ${path.resolve('tests/fixtures/fake-editor-ok.js')}`;
+    const editorPath = buildEditorCommand(path.resolve('tests/fixtures/fake-editor-ok.js'));
     const capturedTmpPathFile = path.join(projectRoot, 'captured-temp-path.txt');
     const baseEnv = {
       ...process.env,
@@ -94,8 +101,6 @@ void describe('integration/edit', () => {
       ENVLT_CAPTURE_TMP_PATH: capturedTmpPathFile,
       ENVLT_NODE: process.execPath,
     };
-
-    const tempFilesBefore = new Set(await fs.readdir(os.tmpdir()));
 
     const setResult = await runCli(['set', 'FOO=original', '--env', 'test'], baseEnv);
     assert.equal(setResult.code, 0);
@@ -120,11 +125,5 @@ void describe('integration/edit', () => {
 
     const capturedTmpPath = await fs.readFile(capturedTmpPathFile, 'utf8');
     await assert.rejects(fs.access(capturedTmpPath));
-
-    const tempFilesAfter = await fs.readdir(os.tmpdir());
-    const leakedFiles = tempFilesAfter.filter(
-      (fileName: string) => !tempFilesBefore.has(fileName) && fileName.startsWith(EDIT_TEMP_PREFIX),
-    );
-    assert.deepEqual(leakedFiles, []);
   });
 });

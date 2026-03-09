@@ -18,11 +18,23 @@ import { createFilesystemAdapter, type StorageAdapter } from '../storage/index.j
 
 import { runEdit } from './edit.js';
 
-const FIXTURE_EDITOR_OK = `${process.execPath} ${path.resolve('tests/fixtures/fake-editor-ok.js')}`;
-const FIXTURE_EDITOR_ABORT = `${process.execPath} ${path.resolve('tests/fixtures/fake-editor-abort.js')}`;
-const FIXTURE_EDITOR_INVALID = `${process.execPath} ${path.resolve('tests/fixtures/fake-editor-invalid.js')}`;
+const FIXTURE_EDITOR_OK = buildEditorCommand(path.resolve('tests/fixtures/fake-editor-ok.js'));
+const FIXTURE_EDITOR_ABORT = buildEditorCommand(
+  path.resolve('tests/fixtures/fake-editor-abort.js'),
+);
+const FIXTURE_EDITOR_INVALID = buildEditorCommand(
+  path.resolve('tests/fixtures/fake-editor-invalid.js'),
+);
 const MODE_MASK = 0o777;
 const SECURE_FILE_MODE = 0o600;
+
+function quoteEditorArg(value: string): string {
+  return `"${value.replace(/"/gu, '\"')}"`;
+}
+
+function buildEditorCommand(scriptPath: string): string {
+  return `${quoteEditorArg(process.execPath)} ${quoteEditorArg(scriptPath)}`;
+}
 
 let projectRoot = '';
 let tempHome = '';
@@ -387,7 +399,7 @@ void describe('commands/edit', () => {
     const result = await runEdit({
       env: 'test',
       projectRoot,
-      editor: `${process.execPath} ${path.resolve('tests/fixtures/fake-editor-delete.js')}`,
+      editor: buildEditorCommand(path.resolve('tests/fixtures/fake-editor-delete.js')),
     });
 
     assert.equal(expectErrorCode(result), ErrorCode.STORAGE_READ_ERROR);
