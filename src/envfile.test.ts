@@ -135,6 +135,17 @@ void describe('envfile', () => {
     assert.equal(result.ok, false);
   });
 
+  void it('does return STORAGE_READ_ERROR when adapter read throws non-app error', async () => {
+    const adapter = {
+      read: (): Promise<Result<Buffer>> => Promise.reject(new Error('read crashed')),
+      write: (): Promise<Result<void>> => Promise.reject(new Error('not implemented')),
+      exists: (): Promise<Result<boolean>> => Promise.reject(new Error('not implemented')),
+      delete: (): Promise<Result<void>> => Promise.reject(new Error('not implemented')),
+    };
+
+    const result = await readEncEnv('staging', generateKey(), projectRoot, adapter);
+    assert.equal(expectErrCode(result), ErrorCode.STORAGE_READ_ERROR);
+  });
   void it('does return CRYPTO_DECRYPT_FAILED when reading with wrong key', async () => {
     const adapter = createFilesystemAdapter(projectRoot);
     const correctKey = generateKey();
