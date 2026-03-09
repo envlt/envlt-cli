@@ -10,6 +10,8 @@
     "dev": "tsc --watch",
     "test": "node --import tsx --experimental-vm-modules --test 'src/**/*.test.ts' 'tests/**/*.test.ts'",
     "test:coverage": "c8 npm test",
+    "test:coverage:ci": "c8 --check-coverage --lines 90 --branches 90 --functions 90 --statements 90 npm test",
+    "audit": "npm audit --audit-level=high",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

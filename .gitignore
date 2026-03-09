@@ -4,5 +4,5 @@ dist/
 *.enc.env.tmp
 .envlt/
 coverage/
-.idea
-tasks
+.idea/
+tasks/
