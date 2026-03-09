@@ -7,6 +7,7 @@ import { runCheck } from '../src/commands/check.js';
 import { readConfig } from '../src/config.js';
 import { runDeclare } from '../src/commands/declare.js';
 import { runEdit } from '../src/commands/edit.js';
+import { runInit } from '../src/commands/init.js';
 import { runSet } from '../src/commands/set.js';
 import { runUse } from '../src/commands/use.js';
 import { DEFAULT_ENV, EXIT_CODES } from '../src/constants.js';
@@ -103,6 +104,23 @@ program
       env: opts.env,
       ...(opts.keyId !== undefined ? { keyId: opts.keyId } : {}),
       ...(opts.editor !== undefined ? { editor: opts.editor } : {}),
+      projectRoot: path.resolve(process.cwd()),
+    });
+
+    if (!result.ok) {
+      logger.error(result.error.message);
+      process.exit(EXIT_CODES.GENERAL_ERROR);
+    }
+  });
+
+program
+  .command('init')
+  .option('--force', 'Overwrite existing config and skip overwrite prompt', false)
+  .option('--skip-import', 'Skip importing from .env.local', false)
+  .action(async (opts: { force: boolean; skipImport: boolean }) => {
+    const result = await runInit({
+      force: opts.force,
+      skipImport: opts.skipImport,
       projectRoot: path.resolve(process.cwd()),
     });
 

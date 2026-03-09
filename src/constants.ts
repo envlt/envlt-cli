@@ -19,3 +19,9 @@ export const EXIT_CODES = {
 } as const;
 
 export type ExitCode = (typeof EXIT_CODES)[keyof typeof EXIT_CODES];
+
+export const GITIGNORE_ADDITIONS = `
+# envlt
+.env.local
+*.enc.env.tmp
+` as const;
