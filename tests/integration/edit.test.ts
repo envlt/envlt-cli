@@ -14,9 +14,8 @@ let tempHome = '';
 let isBuilt = false;
 
 function quoteEditorArg(value: string): string {
-  return `"${value.replace(/"/gu, '\\\"')}"`;
+  return `"${value.replace(/\\/gu, '\\\\').replace(/"/gu, '\\"')}"`;
 }
-
 function buildEditorCommand(scriptPath: string): string {
   return `${quoteEditorArg(process.execPath)} ${quoteEditorArg(scriptPath)}`;
 }

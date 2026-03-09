@@ -29,9 +29,8 @@ const MODE_MASK = 0o777;
 const SECURE_FILE_MODE = 0o600;
 
 function quoteEditorArg(value: string): string {
-  return `"${value.replace(/"/gu, '\\\"')}"`;
+  return `"${value.replace(/\\/gu, '\\\\').replace(/"/gu, '\\"')}"`;
 }
-
 function buildEditorCommand(scriptPath: string): string {
   return `${quoteEditorArg(process.execPath)} ${quoteEditorArg(scriptPath)}`;
 }
@@ -43,6 +42,7 @@ let originalUserProfile: string | undefined;
 let originalEditor: string | undefined;
 let originalVisual: string | undefined;
 let originalPath: string | undefined;
+let originalEnvltNode: string | undefined;
 
 function expectOk<T>(result: Result<T>): T {
   if (!result.ok) {
@@ -80,6 +80,7 @@ beforeEach(async () => {
   originalEditor = process.env['EDITOR'];
   originalVisual = process.env['VISUAL'];
   originalPath = process.env['PATH'];
+  originalEnvltNode = process.env['ENVLT_NODE'];
 
   projectRoot = path.join(os.tmpdir(), randomUUID());
   tempHome = path.join(os.tmpdir(), randomUUID());
@@ -130,7 +131,11 @@ afterEach(async () => {
 
   delete process.env['ENVLT_CAPTURE_TMP_PATH'];
   delete process.env['ENVLT_CAPTURE_TMP_MODE'];
-  process.env['ENVLT_NODE'] = process.execPath;
+  if (originalEnvltNode === undefined) {
+    delete process.env['ENVLT_NODE'];
+  } else {
+    process.env['ENVLT_NODE'] = originalEnvltNode;
+  }
 
   await fs.rm(projectRoot, { recursive: true, force: true });
   await fs.rm(tempHome, { recursive: true, force: true });
@@ -286,8 +291,10 @@ void describe('commands/edit', () => {
     const result = await runEdit({ env: 'test', projectRoot, editor: FIXTURE_EDITOR_OK });
     assert.equal(result.ok, true);
 
-    const modeText = await fs.readFile(capturedModeFile, 'utf8');
-    assert.equal(Number(modeText) & MODE_MASK, SECURE_FILE_MODE);
+    if (process.platform !== 'win32') {
+      const modeText = await fs.readFile(capturedModeFile, 'utf8');
+      assert.equal(Number(modeText) & MODE_MASK, SECURE_FILE_MODE);
+    }
   });
 
   void it('does use VISUAL when EDITOR is not set', async () => {

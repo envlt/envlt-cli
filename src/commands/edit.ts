@@ -71,7 +71,7 @@ function splitEditorCommand(command: string): Result<readonly [string, ...string
       continue;
     }
 
-    if (char === ' ' && quote === undefined) {
+    if (/\s/u.test(char) && quote === undefined) {
       if (current !== '') {
         tokens.push(current);
         current = '';
