@@ -86,7 +86,6 @@ export function encEnvFileName(envName: string): string {
 
 function encEnvFilePath(envName: string, projectRoot: string): EncEnvFile {
   return {
-    envName,
     filePath: path.resolve(projectRoot, encEnvFileName(envName)),
   };
 }
