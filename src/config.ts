@@ -1,5 +1,6 @@
 import * as path from 'node:path';
 
+import { ENV_NAME_PATTERN, KEY_ID_PATTERN } from './constants.js';
 import { AppError, ErrorCode } from './errors.js';
 import { err, ok, type Result } from './result.js';
 import type { StorageAdapter } from './storage/index.js';
@@ -15,8 +16,6 @@ export type EnvltConfig = {
 
 const CONFIG_FILE_NAME = 'envlt.config.json';
 const APP_NAME_MAX_LENGTH = 64;
-const ENV_NAME_PATTERN = /^[a-z][a-z0-9-]{0,30}$/;
-const KEY_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 const EXTENDS_ENTRY_PATTERN = /^github:[^/\s]+\/[^/\s]+\/.+$/u;
 const ALLOWED_KEYS = new Set([
   'appName',

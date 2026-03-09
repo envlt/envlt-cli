@@ -2,6 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import { KEY_ID_PATTERN } from './constants.js';
 import { AppError, ErrorCode } from './errors.js';
 import { err, ok, type Result } from './result.js';
 import { createFilesystemAdapter, type StorageAdapter } from './storage/index.js';
@@ -9,7 +10,6 @@ import { createFilesystemAdapter, type StorageAdapter } from './storage/index.js
 const KEY_DIRECTORY_MODE = 0o700;
 const KEY_FILE_MODE = 0o600;
 const FILE_MODE_MASK = 0o777;
-const KEY_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 
 function resolveKeysDirectory(): string {
   return path.resolve(os.homedir(), '.envlt', 'keys');

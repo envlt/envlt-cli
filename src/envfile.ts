@@ -1,5 +1,6 @@
 import * as path from 'node:path';
 
+import { ENV_NAME_PATTERN } from './constants.js';
 import { decrypt, encrypt } from './crypto.js';
 import { AppError, ErrorCode } from './errors.js';
 import { err, ok, type Result } from './result.js';
@@ -11,8 +12,6 @@ export type EncEnvFile = {
   readonly envName: string;
   readonly filePath: string;
 };
-
-const ENV_NAME_PATTERN = /^[a-z][a-z0-9-]{0,30}$/;
 
 function isValidEnvName(envName: string): boolean {
   return ENV_NAME_PATTERN.test(envName);
