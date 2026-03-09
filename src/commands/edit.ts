@@ -40,7 +40,7 @@ const TEMP_FILE_EXTENSION = '.env';
 const TEMP_FILE_MODE = 0o600;
 const EDIT_ABORTED_MESSAGE = 'Edit aborted, no changes saved';
 const ENV_SAVED_MESSAGE = '✓ Environment saved';
-const TEMP_DELETE_WARNING = 'Warning: failed to remove temporary edit file';
+const TEMP_DELETE_WARNING_PREFIX = 'Warning: failed to remove temporary edit file';
 
 const DEFAULT_DEPS: EditDeps = {
   createAdapter: createFilesystemAdapter,
@@ -108,12 +108,7 @@ function getErrorCode(error: unknown): string | undefined {
 }
 
 function isEditorNotFoundError(error: unknown): boolean {
-  if (!(error instanceof Error) || !('code' in error)) {
-    return false;
-  }
-
-  const { code } = error;
-  return typeof code === 'string' && code === 'ENOENT';
+  return getErrorCode(error) === 'ENOENT';
 }
 
 function resolveEnvPath(options: EditOptions): Result<string> {
@@ -281,7 +276,7 @@ export async function runEdit(
       await deps.unlink(tempPath);
     } catch (error: unknown) {
       if (getErrorCode(error) !== 'ENOENT') {
-        logger.warn(TEMP_DELETE_WARNING);
+        logger.warn(`${TEMP_DELETE_WARNING_PREFIX}: ${tempPath}`);
       }
     }
   }

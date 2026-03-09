@@ -18,9 +18,9 @@ import { createFilesystemAdapter, type StorageAdapter } from '../storage/index.j
 
 import { runEdit } from './edit.js';
 
-const FIXTURE_EDITOR_OK = path.resolve('tests/fixtures/fake-editor-ok.sh');
-const FIXTURE_EDITOR_ABORT = path.resolve('tests/fixtures/fake-editor-abort.sh');
-const FIXTURE_EDITOR_INVALID = path.resolve('tests/fixtures/fake-editor-invalid.sh');
+const FIXTURE_EDITOR_OK = `${process.execPath} ${path.resolve('tests/fixtures/fake-editor-ok.js')}`;
+const FIXTURE_EDITOR_ABORT = `${process.execPath} ${path.resolve('tests/fixtures/fake-editor-abort.js')}`;
+const FIXTURE_EDITOR_INVALID = `${process.execPath} ${path.resolve('tests/fixtures/fake-editor-invalid.js')}`;
 const MODE_MASK = 0o777;
 const SECURE_FILE_MODE = 0o600;
 
@@ -278,6 +278,20 @@ void describe('commands/edit', () => {
     assert.equal(Number(modeText) & MODE_MASK, SECURE_FILE_MODE);
   });
 
+  void it('does use VISUAL when EDITOR is not set', async () => {
+    const key = await setupFixture();
+    const adapter = createFilesystemAdapter(projectRoot);
+    expectOk(await writeEncEnv('test', { FOO: 'original' }, key, projectRoot, adapter));
+
+    process.env['VISUAL'] = FIXTURE_EDITOR_OK;
+
+    const result = await runEdit({ env: 'test', projectRoot });
+    assert.equal(result.ok, true);
+
+    const vars = expectOk(await readEncEnv('test', key, projectRoot, adapter));
+    assert.deepEqual(vars, { FOO: 'edited' });
+  });
+
   void it('does fall back to vi when editor override and env vars are absent', async () => {
     const key = await setupFixture();
     const adapter = createFilesystemAdapter(projectRoot);
@@ -288,7 +302,7 @@ void describe('commands/edit', () => {
     const viPath = path.join(binDir, 'vi');
     await fs.writeFile(viPath, '#!/bin/sh\necho "FOO=edited" > "$1"\nexit 0\n', { mode: 0o755 });
     await fs.chmod(viPath, 0o755);
-    process.env['PATH'] = `${binDir}:${originalPath ?? ''}`;
+    process.env['PATH'] = `${binDir}${path.delimiter}${originalPath ?? ''}`;
 
     const result = await runEdit({ env: 'test', projectRoot });
     assert.equal(result.ok, true);
@@ -319,7 +333,7 @@ void describe('commands/edit', () => {
     const result = await runEdit({
       env: 'test',
       projectRoot,
-      editor: `${process.execPath} ${path.resolve('tests/fixtures/fake-editor-ok.js')}`,
+      editor: FIXTURE_EDITOR_OK,
     });
     assert.equal(result.ok, true);
 
@@ -373,7 +387,7 @@ void describe('commands/edit', () => {
     const result = await runEdit({
       env: 'test',
       projectRoot,
-      editor: path.resolve('tests/fixtures/fake-editor-delete.sh'),
+      editor: `${process.execPath} ${path.resolve('tests/fixtures/fake-editor-delete.js')}`,
     });
 
     assert.equal(expectErrorCode(result), ErrorCode.STORAGE_READ_ERROR);
