@@ -15,6 +15,7 @@ export const EXIT_CODES = {
   MISSING_CONFIG: 2,
   DECRYPTION_FAILED: 3,
   CHILD_PROCESS_ERROR: 4,
+  CHECK_FAILED: 5,
 } as const;
 
 export type ExitCode = (typeof EXIT_CODES)[keyof typeof EXIT_CODES];

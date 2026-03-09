@@ -3,6 +3,8 @@ import * as path from 'node:path';
 
 import { Command } from 'commander';
 
+import { runCheck } from '../src/commands/check.js';
+import { runDeclare } from '../src/commands/declare.js';
 import { runSet } from '../src/commands/set.js';
 import { runUse } from '../src/commands/use.js';
 import { DEFAULT_ENV, EXIT_CODES } from '../src/constants.js';
@@ -19,6 +21,54 @@ program
   .action(async (assignments: readonly string[], opts: { env: string; keyId?: string }) => {
     const result = await runSet(assignments, {
       env: opts.env,
+      ...(opts.keyId !== undefined ? { keyId: opts.keyId } : {}),
+      projectRoot: path.resolve(process.cwd()),
+    });
+
+    if (!result.ok) {
+      logger.error(result.error.message);
+      process.exit(EXIT_CODES.GENERAL_ERROR);
+    }
+  });
+
+program
+  .command('declare')
+  .argument('<key>', 'Environment variable key to declare')
+  .requiredOption('--description <value>', 'Variable description')
+  .option('--env <name>', 'Only require this key in the given environment')
+  .option('--required', 'Mark variable as required', true)
+  .option('--no-required', 'Mark variable as optional')
+  .option('--secret', 'Mark variable as secret', true)
+  .option('--no-secret', 'Mark variable as non-secret')
+  .action(
+    async (
+      key: string,
+      opts: { env?: string; description: string; required: boolean; secret: boolean },
+    ) => {
+      const result = await runDeclare(key, {
+        description: opts.description,
+        ...(opts.env !== undefined ? { env: opts.env } : {}),
+        required: opts.required,
+        secret: opts.secret,
+        projectRoot: path.resolve(process.cwd()),
+      });
+
+      if (!result.ok) {
+        logger.error(result.error.message);
+        process.exit(EXIT_CODES.GENERAL_ERROR);
+      }
+    },
+  );
+
+program
+  .command('check')
+  .option('--env <name>', 'Environment name', DEFAULT_ENV)
+  .option('--strict', 'Also report undeclared variables', false)
+  .option('--key-id <id>', 'Override key ID from config')
+  .action(async (opts: { env: string; strict: boolean; keyId?: string }) => {
+    const result = await runCheck({
+      env: opts.env,
+      strict: opts.strict,
       ...(opts.keyId !== undefined ? { keyId: opts.keyId } : {}),
       projectRoot: path.resolve(process.cwd()),
     });
