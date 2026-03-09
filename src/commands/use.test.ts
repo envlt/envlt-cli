@@ -16,6 +16,7 @@ import { createFilesystemAdapter } from '../storage/index.js';
 let projectRoot = '';
 let tempHome = '';
 let originalHome: string | undefined;
+let originalUserProfile: string | undefined;
 const repoRoot = path.resolve('.');
 const useModuleUrl = pathToFileURL(path.resolve('src/commands/use.ts')).href;
 const nodeExec = process.execPath;
@@ -29,7 +30,7 @@ function createRunUseScript(commandItems: readonly string[], passthrough?: boole
   const commandLiteral = JSON.stringify(commandItems);
   const projectRootLiteral = JSON.stringify(projectRoot);
   const passthroughFragment = passthrough === true ? ', passthrough: true' : '';
-  return `(async () => { const { runUse } = await import('${useModuleUrl}'); await runUse(${commandLiteral}, { env: 'test', projectRoot: ${projectRootLiteral}${passthroughFragment} }); })();`;
+  return `(async () => { const { runUse } = await import('${useModuleUrl}'); const code = await runUse(${commandLiteral}, { env: 'test', projectRoot: ${projectRootLiteral}${passthroughFragment} }); process.exit(code); })();`;
 }
 
 function runNode(script: string, env: NodeJS.ProcessEnv): Promise<RunNodeResult> {
@@ -51,7 +52,6 @@ function runNode(script: string, env: NodeJS.ProcessEnv): Promise<RunNodeResult>
 
 async function setupFixture(): Promise<void> {
   const key = 'f'.repeat(64);
-  process.env['HOME'] = tempHome;
   const config: EnvltConfig = {
     appName: 'envlt',
     envs: ['test'],
@@ -77,10 +77,13 @@ async function setupFixture(): Promise<void> {
 
 beforeEach(async () => {
   originalHome = process.env['HOME'];
+  originalUserProfile = process.env['USERPROFILE'];
   projectRoot = path.join(os.tmpdir(), randomUUID());
   tempHome = path.join(os.tmpdir(), randomUUID());
   await fs.mkdir(projectRoot, { recursive: true });
   await fs.mkdir(tempHome, { recursive: true });
+  process.env['HOME'] = tempHome;
+  process.env['USERPROFILE'] = tempHome;
 });
 
 afterEach(async () => {
@@ -88,6 +91,12 @@ afterEach(async () => {
     delete process.env['HOME'];
   } else {
     process.env['HOME'] = originalHome;
+  }
+
+  if (originalUserProfile === undefined) {
+    delete process.env['USERPROFILE'];
+  } else {
+    process.env['USERPROFILE'] = originalUserProfile;
   }
 
   await fs.rm(projectRoot, { recursive: true, force: true });
@@ -157,7 +166,6 @@ void describe('commands/use', () => {
 
   void it('does exit with DECRYPTION_FAILED when env file is missing', async () => {
     const key = 'f'.repeat(64);
-    process.env['HOME'] = tempHome;
     const adapter = createFilesystemAdapter(projectRoot);
     const config: EnvltConfig = { appName: 'envlt', envs: ['test'], keyId: 'main' };
     const configResult = await writeConfig(config, projectRoot, adapter);

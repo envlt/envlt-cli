@@ -52,12 +52,13 @@ program
         process.exit(EXIT_CODES.GENERAL_ERROR);
       }
 
-      await runUse([command, ...normalizedArgs.slice(1)], {
+      const exitCode = await runUse([command, ...normalizedArgs.slice(1)], {
         env: opts.env,
         ...(opts.keyId !== undefined ? { keyId: opts.keyId } : {}),
         ...(opts.passthrough !== undefined ? { passthrough: opts.passthrough } : {}),
         projectRoot: path.resolve(process.cwd()),
       });
+      process.exit(exitCode);
     },
   );
 

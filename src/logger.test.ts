@@ -10,7 +10,6 @@ let stderrWriteCalls: WriteCall[] = [];
 let stdoutRestore: () => void;
 let stderrRestore: () => void;
 let originalNoColor: string | undefined;
-let originalForceColor: string | undefined;
 
 function setIsTty(stream: NodeJS.WriteStream, value: boolean): () => void {
   const descriptor = Object.getOwnPropertyDescriptor(stream, 'isTTY');
@@ -33,7 +32,6 @@ beforeEach(() => {
   stdoutWriteCalls = [];
   stderrWriteCalls = [];
   originalNoColor = process.env['NO_COLOR'];
-  originalForceColor = process.env['FORCE_COLOR'];
 
   const stdoutMock = mock.method(process.stdout, 'write', (chunk: string | Uint8Array) => {
     stdoutWriteCalls.push([chunk]);
@@ -60,12 +58,6 @@ afterEach(() => {
     delete process.env['NO_COLOR'];
   } else {
     process.env['NO_COLOR'] = originalNoColor;
-  }
-
-  if (originalForceColor === undefined) {
-    delete process.env['FORCE_COLOR'];
-  } else {
-    process.env['FORCE_COLOR'] = originalForceColor;
   }
 });
 
@@ -102,7 +94,6 @@ void describe('logger', () => {
   });
 
   void it('does use stderr tty state for color decisions', () => {
-    process.env['FORCE_COLOR'] = '1';
     const restoreStdoutTty = setIsTty(process.stdout, true);
     const restoreStderrTty = setIsTty(process.stderr, false);
     const logger = createLogger();

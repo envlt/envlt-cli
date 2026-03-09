@@ -42,6 +42,15 @@ function parseAssignment(assignment: string): Result<readonly [string, string]> 
   }
 
   const key = assignment.slice(0, separatorIndex);
+  if (key.trim() === '') {
+    return err(
+      new AppError(
+        ErrorCode.SET_INVALID_ASSIGNMENT,
+        `Invalid assignment "${assignment}". Key must not be empty.`,
+      ),
+    );
+  }
+
   const value = assignment.slice(separatorIndex + 1);
   return ok([key, value]);
 }
@@ -82,7 +91,11 @@ async function writeEncEnvAtomically(
   } catch (error: unknown) {
     return err(new AppError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to write env file.', error));
   } finally {
-    await fileOps.rm(tmpPath, { force: true });
+    try {
+      await fileOps.rm(tmpPath, { force: true });
+    } catch {
+      // Best-effort cleanup: do not override the result of write/rename.
+    }
   }
 }
 

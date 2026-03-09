@@ -18,6 +18,7 @@ import { runSet } from './set.js';
 let projectRoot = '';
 let tempHome = '';
 let originalHome: string | undefined;
+let originalUserProfile: string | undefined;
 
 function expectOk<T>(result: Result<T>): T {
   if (!result.ok) {
@@ -47,11 +48,13 @@ async function writeMinimalConfig(projectDir: string, keyId: string): Promise<vo
 
 beforeEach(async () => {
   originalHome = process.env['HOME'];
+  originalUserProfile = process.env['USERPROFILE'];
   projectRoot = path.join(os.tmpdir(), randomUUID());
   tempHome = path.join(os.tmpdir(), randomUUID());
   await fs.mkdir(projectRoot, { recursive: true });
   await fs.mkdir(tempHome, { recursive: true });
   process.env['HOME'] = tempHome;
+  process.env['USERPROFILE'] = tempHome;
 });
 
 afterEach(async () => {
@@ -59,6 +62,12 @@ afterEach(async () => {
     delete process.env['HOME'];
   } else {
     process.env['HOME'] = originalHome;
+  }
+
+  if (originalUserProfile === undefined) {
+    delete process.env['USERPROFILE'];
+  } else {
+    process.env['USERPROFILE'] = originalUserProfile;
   }
 
   await fs.rm(projectRoot, { recursive: true, force: true });
@@ -112,6 +121,14 @@ void describe('commands/set', () => {
     await writeMinimalConfig(projectRoot, 'main');
 
     const result = await runSet(['INVALID'], { env: 'test', projectRoot });
+    assert.equal(expectErrorCode(result), ErrorCode.SET_INVALID_ASSIGNMENT);
+  });
+
+  void it('does return SET_INVALID_ASSIGNMENT when assignment key is empty', async () => {
+    expectOk(await saveKey('main', generateKey()));
+    await writeMinimalConfig(projectRoot, 'main');
+
+    const result = await runSet(['=value'], { env: 'test', projectRoot });
     assert.equal(expectErrorCode(result), ErrorCode.SET_INVALID_ASSIGNMENT);
   });
 
