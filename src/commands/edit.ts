@@ -6,9 +6,9 @@ import * as path from 'node:path';
 
 import { readConfig } from '../config.js';
 import {
-  encEnvFileName,
   parseEnv,
   readEncEnv,
+  resolveEncEnvPath,
   stringifyEnv,
   writeEncEnv,
   type EnvVars,
@@ -111,26 +111,12 @@ function isEditorNotFoundError(error: unknown): boolean {
   return getErrorCode(error) === 'ENOENT';
 }
 
-function resolveEnvPath(options: EditOptions): Result<string> {
-  try {
-    return ok(path.resolve(options.projectRoot, encEnvFileName(options.env)));
-  } catch (error: unknown) {
-    if (error instanceof AppError) {
-      return err(error);
-    }
-
-    return err(
-      new AppError(ErrorCode.ENVFILE_INVALID_ENV_NAME, 'Invalid environment name.', error),
-    );
-  }
-}
-
 async function readExistingVars(
   options: EditOptions,
   keyHex: string,
   adapter: StorageAdapter,
 ): Promise<Result<EnvVars>> {
-  const envPathResult = resolveEnvPath(options);
+  const envPathResult = resolveEncEnvPath(options.env, options.projectRoot);
   if (!envPathResult.ok) {
     return err(envPathResult.error);
   }

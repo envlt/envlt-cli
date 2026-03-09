@@ -29,7 +29,7 @@ const MODE_MASK = 0o777;
 const SECURE_FILE_MODE = 0o600;
 
 function quoteEditorArg(value: string): string {
-  return `"${value.replace(/"/gu, '\"')}"`;
+  return `"${value.replace(/"/gu, '\\\"')}"`;
 }
 
 function buildEditorCommand(scriptPath: string): string {
@@ -311,9 +311,20 @@ void describe('commands/edit', () => {
 
     const binDir = path.join(projectRoot, 'bin');
     await fs.mkdir(binDir, { recursive: true });
-    const viPath = path.join(binDir, 'vi');
-    await fs.writeFile(viPath, '#!/bin/sh\necho "FOO=edited" > "$1"\nexit 0\n', { mode: 0o755 });
-    await fs.chmod(viPath, 0o755);
+    if (process.platform === 'win32') {
+      const viPath = path.join(binDir, 'vi.cmd');
+      await fs.writeFile(
+        viPath,
+        `@echo off\n"${process.execPath}" "${path.resolve('tests/fixtures/fake-editor-ok.js')}" %1\n`,
+        'utf8',
+      );
+    } else {
+      const viPath = path.join(binDir, 'vi');
+      await fs.writeFile(viPath, '#!/bin/sh\necho "FOO=edited" > "$1"\nexit 0\n', {
+        mode: 0o755,
+      });
+      await fs.chmod(viPath, 0o755);
+    }
     process.env['PATH'] = `${binDir}${path.delimiter}${originalPath ?? ''}`;
 
     const result = await runEdit({ env: 'test', projectRoot });
