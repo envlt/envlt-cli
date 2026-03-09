@@ -3,18 +3,33 @@ import * as path from 'node:path';
 import { EXIT_CODES } from '../constants.js';
 import { readConfig } from '../config.js';
 import { encEnvFileName, readEncEnv, type EnvVars } from '../envfile.js';
+import { AppError, ErrorCode } from '../errors.js';
 import { err, ok, type Result } from '../result.js';
 import { loadKey } from '../keystore.js';
 import { logger } from '../logger.js';
 import { readManifest, validateManifest, type ManifestViolation } from '../manifest.js';
 import { createFilesystemAdapter } from '../storage/index.js';
 
-export interface CheckOptions {
+export type CheckOptions = {
   readonly env: string;
   readonly projectRoot: string;
   readonly keyId?: string;
   readonly strict?: boolean;
   readonly exitOnFailure?: boolean;
+};
+
+function resolveEncEnvPath(envName: string, projectRoot: string): Result<string> {
+  try {
+    return ok(path.resolve(projectRoot, encEnvFileName(envName)));
+  } catch (error: unknown) {
+    if (error instanceof AppError) {
+      return err(error);
+    }
+
+    return err(
+      new AppError(ErrorCode.ENVFILE_INVALID_ENV_NAME, 'Invalid environment name.', error),
+    );
+  }
 }
 
 export async function runCheck(
@@ -37,8 +52,12 @@ export async function runCheck(
     return err(manifestResult.error);
   }
 
-  const envPath = path.resolve(options.projectRoot, encEnvFileName(options.env));
-  const existsResult = await adapter.exists(envPath);
+  const envPathResult = resolveEncEnvPath(options.env, options.projectRoot);
+  if (!envPathResult.ok) {
+    return err(envPathResult.error);
+  }
+
+  const existsResult = await adapter.exists(envPathResult.value);
   if (!existsResult.ok) {
     return err(existsResult.error);
   }

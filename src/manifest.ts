@@ -1,4 +1,3 @@
-import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
 import type { EnvVars } from './envfile.js';
@@ -101,19 +100,15 @@ export async function writeManifest(
   projectRoot: string,
   adapter: StorageAdapter,
 ): Promise<Result<void>> {
-  void adapter;
   const sortedEntries = [...manifest.entries].sort((left, right) =>
     left.key.localeCompare(right.key),
   );
   const output: Manifest = { version: MANIFEST_VERSION, entries: sortedEntries };
   const manifestPath = path.resolve(projectRoot, MANIFEST_FILE_NAME);
+  const serialized = `${JSON.stringify(output, null, 2)}
+`;
 
-  try {
-    await fs.writeFile(manifestPath, `${JSON.stringify(output, null, 2)}\n`, 'utf8');
-    return ok(undefined);
-  } catch (error: unknown) {
-    return err(new AppError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to write manifest.', error));
-  }
+  return adapter.write(manifestPath, Buffer.from(serialized, 'utf8'));
 }
 
 export function upsertEntry(manifest: Manifest, entry: ManifestEntry): Manifest {

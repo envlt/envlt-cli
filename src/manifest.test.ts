@@ -114,11 +114,12 @@ void describe('manifest', () => {
   });
 
   void it('does return STORAGE_WRITE_ERROR when writeManifest cannot write file', async () => {
-    const missingRoot = path.join(os.tmpdir(), randomUUID());
+    const invalidRoot = path.join(projectRoot, 'not-a-directory');
+    await fs.writeFile(invalidRoot, 'x', 'utf8');
     const result = await writeManifest(
       { version: 1, entries: [] },
-      missingRoot,
-      createFilesystemAdapter(missingRoot),
+      invalidRoot,
+      createFilesystemAdapter(invalidRoot),
     );
 
     if (result.ok) {

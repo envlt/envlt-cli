@@ -23,6 +23,7 @@ let projectRoot = '';
 let tempHome = '';
 let originalHome: string | undefined;
 let originalUserProfile: string | undefined;
+let originalExitCode: typeof process.exitCode;
 
 function expectOk<T>(result: Result<T>): T {
   if (!result.ok) {
@@ -51,6 +52,7 @@ async function writeManifestFile(manifest: Manifest): Promise<void> {
 beforeEach(async () => {
   originalHome = process.env['HOME'];
   originalUserProfile = process.env['USERPROFILE'];
+  originalExitCode = process.exitCode;
   projectRoot = path.join(os.tmpdir(), randomUUID());
   tempHome = path.join(os.tmpdir(), randomUUID());
   await fs.mkdir(projectRoot, { recursive: true });
@@ -73,6 +75,8 @@ afterEach(async () => {
   } else {
     process.env['USERPROFILE'] = originalUserProfile;
   }
+
+  process.exitCode = originalExitCode;
 
   await fs.rm(projectRoot, { recursive: true, force: true });
   await fs.rm(tempHome, { recursive: true, force: true });

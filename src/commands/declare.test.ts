@@ -14,7 +14,7 @@ let projectRoot = '';
 
 function expectOk<T>(result: Result<T>): T {
   if (!result.ok) {
-    throw result.error;
+    assert.fail(`Expected ok result, received error: ${result.error.message}`);
   }
 
   return result.value;
@@ -29,7 +29,7 @@ afterEach(async () => {
   await fs.rm(projectRoot, { recursive: true, force: true });
 });
 
-void describe('commands/declare', () => {
+void describe('commands/declare', { concurrency: false }, () => {
   void it('does create manifest file when it does not exist', async () => {
     expectOk(
       await runDeclare('DATABASE_URL', {
@@ -121,11 +121,12 @@ void describe('commands/declare', () => {
   });
 
   void it('does return error when manifest cannot be written', async () => {
-    const missingRoot = path.join(os.tmpdir(), randomUUID());
+    const invalidRoot = path.join(projectRoot, 'not-a-directory');
+    await fs.writeFile(invalidRoot, 'x', 'utf8');
 
     const result = await runDeclare('DATABASE_URL', {
       description: 'Database URL',
-      projectRoot: missingRoot,
+      projectRoot: invalidRoot,
     });
 
     assert.equal(result.ok, false);

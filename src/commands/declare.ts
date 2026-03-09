@@ -4,13 +4,13 @@ import { err, ok, type Result } from '../result.js';
 import { createFilesystemAdapter } from '../storage/index.js';
 import { validateEnvVarKey } from '../validation/env-key.js';
 
-export interface DeclareOptions {
+export type DeclareOptions = {
   readonly env?: string;
   readonly description: string;
   readonly required?: boolean;
   readonly secret?: boolean;
   readonly projectRoot: string;
-}
+};
 
 export async function runDeclare(key: string, options: DeclareOptions): Promise<Result<void>> {
   const validationResult = validateEnvVarKey(key);
