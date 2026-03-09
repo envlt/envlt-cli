@@ -1,14 +1,15 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-import { encrypt } from '../crypto.js';
 import { readConfig } from '../config.js';
+import { encrypt } from '../crypto.js';
 import { encEnvFileName, readEncEnv, stringifyEnv, type EnvVars } from '../envfile.js';
 import { AppError, ErrorCode } from '../errors.js';
 import { loadKey } from '../keystore.js';
+import { logger } from '../logger.js';
 import { err, ok, type Result } from '../result.js';
 import { createFilesystemAdapter } from '../storage/index.js';
-import { validateEnvVarKey } from '../validation/env-key.js';
+import { parseAssignment } from '../validation/keys.js';
 
 export type SetOptions = {
   readonly env: string;
@@ -22,7 +23,6 @@ type FileOps = {
   readonly rm: typeof fs.rm;
 };
 
-const ASSIGNMENT_SEPARATOR = '=';
 const TEMP_FILE_SUFFIX = '.tmp';
 const ENCRYPTED_ENV_FILE_MODE = 0o600;
 const DEFAULT_FILE_OPS: FileOps = {
@@ -30,31 +30,6 @@ const DEFAULT_FILE_OPS: FileOps = {
   rename: fs.rename,
   rm: fs.rm,
 };
-
-function parseAssignment(assignment: string): Result<readonly [string, string]> {
-  const separatorIndex = assignment.indexOf(ASSIGNMENT_SEPARATOR);
-  if (separatorIndex < 0) {
-    return err(
-      new AppError(
-        ErrorCode.SET_INVALID_ASSIGNMENT,
-        `Invalid assignment "${assignment}". Expected KEY=VALUE format.`,
-      ),
-    );
-  }
-
-  const key = assignment.slice(0, separatorIndex);
-  if (key.trim() === '') {
-    return err(
-      new AppError(
-        ErrorCode.SET_INVALID_ASSIGNMENT,
-        `Invalid assignment "${assignment}". Key must not be empty.`,
-      ),
-    );
-  }
-
-  const value = assignment.slice(separatorIndex + 1);
-  return ok([key, value]);
-}
 
 async function readExistingVars(
   envName: string,
@@ -144,18 +119,16 @@ export async function runSet(
 
   const mergedVars: Record<string, string> = { ...existingVars.value };
   for (const assignment of assignments) {
-    const parsed = parseAssignment(assignment);
+    const parsed = parseAssignment(assignment, configResult.value.customDictionary);
     if (!parsed.ok) {
       return err(parsed.error);
     }
 
-    const [key, value] = parsed.value;
-    const keyValidation = validateEnvVarKey(key);
-    if (!keyValidation.ok) {
-      return err(keyValidation.error);
+    for (const warning of parsed.value.warnings) {
+      logger.warn(warning);
     }
 
-    mergedVars[key] = value;
+    mergedVars[parsed.value.key] = parsed.value.value;
   }
 
   return writeEncEnvAtomically(

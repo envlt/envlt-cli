@@ -4,11 +4,13 @@ import * as path from 'node:path';
 import { Command } from 'commander';
 
 import { runCheck } from '../src/commands/check.js';
+import { readConfig } from '../src/config.js';
 import { runDeclare } from '../src/commands/declare.js';
 import { runSet } from '../src/commands/set.js';
 import { runUse } from '../src/commands/use.js';
 import { DEFAULT_ENV, EXIT_CODES } from '../src/constants.js';
 import { logger } from '../src/logger.js';
+import { createFilesystemAdapter } from '../src/storage/index.js';
 
 const program = new Command();
 program.name('envlt').description('Encrypted environment variable manager').version('0.1.0');
@@ -45,12 +47,23 @@ program
       key: string,
       opts: { env?: string; description: string; required: boolean; secret: boolean },
     ) => {
+      const projectRoot = path.resolve(process.cwd());
+      const adapter = createFilesystemAdapter(projectRoot);
+      const configResult = await readConfig(projectRoot, adapter);
+      if (!configResult.ok) {
+        logger.error(configResult.error.message);
+        process.exit(EXIT_CODES.GENERAL_ERROR);
+      }
+
       const result = await runDeclare(key, {
         description: opts.description,
         ...(opts.env !== undefined ? { env: opts.env } : {}),
         required: opts.required,
         secret: opts.secret,
-        projectRoot: path.resolve(process.cwd()),
+        ...(configResult.value.customDictionary !== undefined
+          ? { customDictionary: configResult.value.customDictionary }
+          : {}),
+        projectRoot,
       });
 
       if (!result.ok) {

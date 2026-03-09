@@ -1,8 +1,9 @@
 import { logger } from '../logger.js';
-import { upsertEntry, readManifest, writeManifest } from '../manifest.js';
+import { readManifest, upsertEntry, writeManifest } from '../manifest.js';
+import { AppError, ErrorCode } from '../errors.js';
 import { err, ok, type Result } from '../result.js';
 import { createFilesystemAdapter } from '../storage/index.js';
-import { validateEnvVarKey } from '../validation/env-key.js';
+import { validateKey } from '../validation/keys.js';
 
 export type DeclareOptions = {
   readonly env?: string;
@@ -10,12 +11,17 @@ export type DeclareOptions = {
   readonly required?: boolean;
   readonly secret?: boolean;
   readonly projectRoot: string;
+  readonly customDictionary?: readonly string[];
 };
 
 export async function runDeclare(key: string, options: DeclareOptions): Promise<Result<void>> {
-  const validationResult = validateEnvVarKey(key);
-  if (!validationResult.ok) {
-    return err(validationResult.error);
+  const validationResult = validateKey(key, options.customDictionary);
+  if (!validationResult.valid) {
+    return err(new AppError(ErrorCode.SET_INVALID_ASSIGNMENT, validationResult.error));
+  }
+
+  for (const warning of validationResult.warnings) {
+    logger.warn(warning);
   }
 
   const adapter = createFilesystemAdapter(options.projectRoot);
