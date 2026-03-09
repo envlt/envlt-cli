@@ -84,6 +84,20 @@ export function encEnvFileName(envName: string): string {
   return `.env.${envName}.enc`;
 }
 
+export function resolveEncEnvPath(envName: string, projectRoot: string): Result<string> {
+  try {
+    return ok(path.resolve(projectRoot, encEnvFileName(envName)));
+  } catch (error: unknown) {
+    if (error instanceof AppError) {
+      return err(error);
+    }
+
+    return err(
+      new AppError(ErrorCode.ENVFILE_INVALID_ENV_NAME, 'Invalid environment name.', error),
+    );
+  }
+}
+
 function encEnvFilePath(envName: string, projectRoot: string): EncEnvFile {
   return {
     filePath: path.resolve(projectRoot, encEnvFileName(envName)),
