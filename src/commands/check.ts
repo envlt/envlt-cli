@@ -92,8 +92,11 @@ export async function runCheck(
     logger.warn(`⚠ ${violation.key} — not declared in manifest`);
   }
 
+  const shouldExitOnFailure = options.exitOnFailure ?? true;
   const hasMissingRequired = violations.some((violation) => violation.type === 'missing_required');
-  if (hasMissingRequired && (options.exitOnFailure ?? true)) {
+  const hasUndeclared = violations.some((violation) => violation.type === 'undeclared');
+
+  if (shouldExitOnFailure && (hasMissingRequired || hasUndeclared)) {
     process.exitCode = EXIT_CODES.CHECK_FAILED;
   }
 

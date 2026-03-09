@@ -4,6 +4,7 @@ import type { EnvVars } from './envfile.js';
 import { AppError, ErrorCode } from './errors.js';
 import { err, ok, type Result } from './result.js';
 import type { StorageAdapter } from './storage/index.js';
+import { isObjectRecord } from './validation/guards.js';
 
 export type ManifestEntry = {
   readonly key: string;
@@ -25,10 +26,6 @@ export type ManifestViolation = {
 
 const MANIFEST_FILE_NAME = 'envlt.manifest.json';
 const MANIFEST_VERSION = 1;
-
-function isObjectRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function isManifestEntry(value: unknown): value is ManifestEntry {
   if (!isObjectRecord(value)) {

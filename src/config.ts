@@ -2,6 +2,7 @@ import * as path from 'node:path';
 
 import { CONFIG_FILE_NAME, ENV_NAME_PATTERN, KEY_ID_PATTERN } from './constants.js';
 import { AppError, ErrorCode } from './errors.js';
+import { isObjectRecord } from './validation/guards.js';
 import { err, ok, type Result } from './result.js';
 import type { StorageAdapter } from './storage/index.js';
 
@@ -24,10 +25,6 @@ const ALLOWED_KEYS = new Set([
   'customDictionary',
   'keyId',
 ]);
-
-function isObjectRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function isStringArray(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string');

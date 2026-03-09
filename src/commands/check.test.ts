@@ -88,6 +88,31 @@ void describe('commands/check', () => {
     assert.equal(result.ok, false);
   });
 
+  void it('does return key loading error when key is missing', async () => {
+    const config: EnvltConfig = {
+      appName: 'check-test',
+      envs: ['staging'],
+      keyId: 'missing',
+    };
+    const adapter = createFilesystemAdapter(projectRoot);
+    expectOk(await writeConfig(config, projectRoot, adapter));
+
+    const result = await runCheck({ env: 'staging', projectRoot, exitOnFailure: false });
+    assert.equal(result.ok, false);
+  });
+
+  void it('does return invalid env error for invalid env name', async () => {
+    const key = generateKey();
+    await setupConfigAndKey('main', key);
+    await writeManifestFile({
+      version: 1,
+      entries: [{ key: 'DATABASE_URL', description: 'db', required: true, secret: true }],
+    });
+
+    const result = await runCheck({ env: 'INVALID_ENV', projectRoot, exitOnFailure: false });
+    assert.equal(result.ok, false);
+  });
+
   void it('does return error when manifest is malformed', async () => {
     const key = generateKey();
     await setupConfigAndKey('main', key);
@@ -125,6 +150,7 @@ void describe('commands/check', () => {
     const result = await runCheck({ env: 'staging', projectRoot, exitOnFailure: false });
     assert.equal(result.ok, false);
   });
+
   void it('does return empty violations and log success when all required vars are present', async () => {
     const key = generateKey();
     await setupConfigAndKey('main', key);
@@ -176,6 +202,59 @@ void describe('commands/check', () => {
     const result = await runCheck({ env: 'staging', projectRoot, exitOnFailure: false });
 
     assert.deepEqual(expectOk(result), [{ key: 'DATABASE_URL', type: 'missing_required' }]);
+    assert.equal(process.exitCode, 0);
+  });
+
+  void it('does set check failure exit code for undeclared violations in strict mode', async () => {
+    const key = generateKey();
+    await setupConfigAndKey('main', key);
+    await writeManifestFile({
+      version: 1,
+      entries: [{ key: 'DATABASE_URL', description: 'db', required: true, secret: true }],
+    });
+    expectOk(
+      await writeEncEnv(
+        'staging',
+        { DATABASE_URL: 'postgres://localhost/db', RANDOM_KEY: '1' },
+        key,
+        projectRoot,
+        createFilesystemAdapter(projectRoot),
+      ),
+    );
+
+    process.exitCode = 0;
+    const result = await runCheck({ env: 'staging', projectRoot, strict: true });
+
+    assert.deepEqual(expectOk(result), [{ key: 'RANDOM_KEY', type: 'undeclared' }]);
+    assert.equal(process.exitCode, EXIT_CODES.CHECK_FAILED);
+  });
+
+  void it('does not set check failure exit code for undeclared violations when exitOnFailure is false', async () => {
+    const key = generateKey();
+    await setupConfigAndKey('main', key);
+    await writeManifestFile({
+      version: 1,
+      entries: [{ key: 'DATABASE_URL', description: 'db', required: true, secret: true }],
+    });
+    expectOk(
+      await writeEncEnv(
+        'staging',
+        { DATABASE_URL: 'postgres://localhost/db', RANDOM_KEY: '1' },
+        key,
+        projectRoot,
+        createFilesystemAdapter(projectRoot),
+      ),
+    );
+
+    process.exitCode = 0;
+    const result = await runCheck({
+      env: 'staging',
+      projectRoot,
+      strict: true,
+      exitOnFailure: false,
+    });
+
+    assert.deepEqual(expectOk(result), [{ key: 'RANDOM_KEY', type: 'undeclared' }]);
     assert.equal(process.exitCode, 0);
   });
 
