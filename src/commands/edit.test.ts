@@ -309,6 +309,35 @@ void describe('commands/edit', () => {
     assert.deepEqual(vars, { FOO: 'edited' });
   });
 
+  void it('does support editor commands with arguments', async () => {
+    const key = await setupFixture();
+    const adapter = createFilesystemAdapter(projectRoot);
+    expectOk(await writeEncEnv('test', { FOO: 'original' }, key, projectRoot, adapter));
+
+    const result = await runEdit({
+      env: 'test',
+      projectRoot,
+      editor: `${process.execPath} ${path.resolve('tests/fixtures/fake-editor-ok.js')}`,
+    });
+    assert.equal(result.ok, true);
+
+    const vars = expectOk(await readEncEnv('test', key, projectRoot, adapter));
+    assert.deepEqual(vars, { FOO: 'edited' });
+  });
+
+  void it('does return EDIT_INVALID_EDITOR_COMMAND for malformed editor command', async () => {
+    await setupFixture();
+    const result = await runEdit({ env: 'test', projectRoot, editor: '"unterminated' });
+    assert.equal(expectErrorCode(result), ErrorCode.EDIT_INVALID_EDITOR_COMMAND);
+  });
+
+  void it('does return EDIT_EDITOR_EXEC_FAILED when editor execution fails for non-ENOENT errors', async () => {
+    await setupFixture();
+
+    const result = await runEdit({ env: 'test', projectRoot, editor: projectRoot });
+    assert.equal(expectErrorCode(result), ErrorCode.EDIT_EDITOR_EXEC_FAILED);
+  });
+
   void it('does return EDIT_EDITOR_NOT_FOUND when editor command does not exist', async () => {
     await setupFixture();
 
@@ -328,14 +357,11 @@ void describe('commands/edit', () => {
     assert.deepEqual(vars, { FOO: 'original' });
   });
 
-  void it('does reject when env name is invalid', async () => {
+  void it('does return ENVFILE_INVALID_ENV_NAME when env name is invalid', async () => {
     await setupFixture();
 
-    await assert.rejects(
-      runEdit({ env: 'INVALID_ENV', projectRoot, editor: FIXTURE_EDITOR_OK }),
-      (error: unknown) =>
-        error instanceof AppError && error.code === ErrorCode.ENVFILE_INVALID_ENV_NAME,
-    );
+    const result = await runEdit({ env: 'INVALID_ENV', projectRoot, editor: FIXTURE_EDITOR_OK });
+    assert.equal(expectErrorCode(result), ErrorCode.ENVFILE_INVALID_ENV_NAME);
   });
 
   void it('does return STORAGE_READ_ERROR when editor deletes temp file and does log cleanup warning', async () => {

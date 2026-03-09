@@ -92,6 +92,8 @@ void describe('integration/edit', () => {
       EDITOR: editorPath,
     };
 
+    const tempFilesBefore = new Set(await fs.readdir(os.tmpdir()));
+
     const setResult = await runCli(['set', 'FOO=original', '--env', 'test'], baseEnv);
     assert.equal(setResult.code, 0);
 
@@ -113,8 +115,10 @@ void describe('integration/edit', () => {
     assert.equal(useResult.code, 0);
     assert.equal(useResult.stdout, 'edited');
 
-    const tempFiles = await fs.readdir(os.tmpdir());
-    const leftovers = tempFiles.filter((fileName: string) => fileName.startsWith(EDIT_TEMP_PREFIX));
-    assert.deepEqual(leftovers, []);
+    const tempFilesAfter = await fs.readdir(os.tmpdir());
+    const createdByTest = tempFilesAfter.filter(
+      (fileName: string) => !tempFilesBefore.has(fileName) && fileName.startsWith(EDIT_TEMP_PREFIX),
+    );
+    assert.deepEqual(createdByTest, []);
   });
 });

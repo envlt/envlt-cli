@@ -19,12 +19,12 @@ import { logger } from '../logger.js';
 import { err, ok, type Result } from '../result.js';
 import { createFilesystemAdapter, type StorageAdapter } from '../storage/index.js';
 
-export interface EditOptions {
+export type EditOptions = {
   readonly env: string;
   readonly projectRoot: string;
   readonly keyId?: string;
   readonly editor?: string;
-}
+};
 
 type EditDeps = {
   readonly createAdapter: (projectRoot: string) => StorageAdapter;
@@ -55,6 +55,49 @@ function resolveEditorCommand(options: EditOptions): string {
   return options.editor ?? process.env['EDITOR'] ?? process.env['VISUAL'] ?? 'vi';
 }
 
+function splitEditorCommand(command: string): Result<readonly [string, ...string[]]> {
+  const tokens: string[] = [];
+  let current = '';
+  let quote: 'single' | 'double' | undefined;
+
+  for (const char of command) {
+    if (char === "'" && quote !== 'double') {
+      quote = quote === 'single' ? undefined : 'single';
+      continue;
+    }
+
+    if (char === '"' && quote !== 'single') {
+      quote = quote === 'double' ? undefined : 'double';
+      continue;
+    }
+
+    if (char === ' ' && quote === undefined) {
+      if (current !== '') {
+        tokens.push(current);
+        current = '';
+      }
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (quote !== undefined) {
+    return err(new AppError(ErrorCode.EDIT_INVALID_EDITOR_COMMAND, 'Invalid editor command.'));
+  }
+
+  if (current !== '') {
+    tokens.push(current);
+  }
+
+  const executable = tokens[0];
+  if (executable === undefined) {
+    return err(new AppError(ErrorCode.EDIT_INVALID_EDITOR_COMMAND, 'Invalid editor command.'));
+  }
+
+  return ok([executable, ...tokens.slice(1)]);
+}
+
 function isEditorNotFoundError(error: unknown): boolean {
   if (!(error instanceof Error) || !('code' in error)) {
     return false;
@@ -64,14 +107,32 @@ function isEditorNotFoundError(error: unknown): boolean {
   return typeof code === 'string' && code === 'ENOENT';
 }
 
+function resolveEnvPath(options: EditOptions): Result<string> {
+  try {
+    return ok(path.resolve(options.projectRoot, encEnvFileName(options.env)));
+  } catch (error: unknown) {
+    if (error instanceof AppError) {
+      return err(error);
+    }
+
+    return err(
+      new AppError(ErrorCode.ENVFILE_INVALID_ENV_NAME, 'Invalid environment name.', error),
+    );
+  }
+}
+
 async function readExistingVars(
   options: EditOptions,
   keyHex: string,
   deps: EditDeps,
 ): Promise<Result<EnvVars>> {
   const adapter = deps.createAdapter(options.projectRoot);
-  const envPath = path.resolve(options.projectRoot, encEnvFileName(options.env));
-  const existsResult = await adapter.exists(envPath);
+  const envPathResult = resolveEnvPath(options);
+  if (!envPathResult.ok) {
+    return err(envPathResult.error);
+  }
+
+  const existsResult = await adapter.exists(envPathResult.value);
   if (!existsResult.ok) {
     return err(existsResult.error);
   }
@@ -89,10 +150,16 @@ async function writeTempFile(
   deps: EditDeps,
 ): Promise<Result<void>> {
   try {
-    await deps.writeFile(filePath, content, { mode: TEMP_FILE_MODE });
+    await deps.writeFile(filePath, content, { mode: TEMP_FILE_MODE, flag: 'wx' });
     await deps.chmod(filePath, TEMP_FILE_MODE);
     return ok(undefined);
   } catch (error: unknown) {
+    try {
+      await deps.unlink(filePath);
+    } catch {
+      // Best-effort cleanup.
+    }
+
     return err(
       new AppError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to create temporary edit file.', error),
     );
@@ -100,7 +167,16 @@ async function writeTempFile(
 }
 
 function openEditor(editor: string, filePath: string, deps: EditDeps): Result<boolean> {
-  const result: SpawnSyncReturns<Buffer> = deps.runEditor(editor, [filePath], { stdio: 'inherit' });
+  const commandResult = splitEditorCommand(editor);
+  if (!commandResult.ok) {
+    return err(commandResult.error);
+  }
+
+  const [executable, ...args] = commandResult.value;
+  const result: SpawnSyncReturns<Buffer> = deps.runEditor(executable, [...args, filePath], {
+    stdio: 'inherit',
+  });
+
   if (result.error !== undefined) {
     if (isEditorNotFoundError(result.error)) {
       return err(
@@ -113,7 +189,11 @@ function openEditor(editor: string, filePath: string, deps: EditDeps): Result<bo
     }
 
     return err(
-      new AppError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to run editor command.', result.error),
+      new AppError(
+        ErrorCode.EDIT_EDITOR_EXEC_FAILED,
+        'Failed to run editor command.',
+        result.error,
+      ),
     );
   }
 
