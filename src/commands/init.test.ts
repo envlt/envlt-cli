@@ -280,13 +280,91 @@ void describe('commands/init', () => {
     assert.equal(prompter.confirmCount, 1);
   });
 
+  void it('does reuse existing key when encrypted env files already exist', async () => {
+    const adapter = createFilesystemAdapter(projectRoot);
+    const originalKey = 'a'.repeat(64);
+    const saveOriginal = await import('../keystore.js').then(({ saveKey }) =>
+      saveKey('existing-key', originalKey),
+    );
+    assert.equal(saveOriginal.ok, true);
+
+    const writeExisting = await writeEncEnv(
+      'development',
+      { KEEP: 'yes' },
+      originalKey,
+      projectRoot,
+      adapter,
+    );
+    assert.equal(writeExisting.ok, true);
+
+    const existingConfig = {
+      appName: 'oldapp',
+      envs: ['development'],
+      keyId: 'existing-key',
+    };
+    await fs.writeFile(
+      path.join(projectRoot, 'envlt.config.json'),
+      `${JSON.stringify(existingConfig)}
+`,
+      'utf8',
+    );
+
+    let savedCount = 0;
+    const prompter = new FakePrompter([
+      { kind: 'input', value: 'newapp' },
+      { kind: 'checkbox', value: ['development'] },
+      { kind: 'input', value: '' },
+      { kind: 'confirm', value: false },
+    ]);
+
+    const deps = {
+      ...withDeps(prompter, []),
+      saveGeneratedKey: (keyId: string, key: string): Promise<Result<void>> => {
+        void keyId;
+        void key;
+        savedCount += 1;
+        return Promise.resolve({ ok: true, value: undefined });
+      },
+    };
+
+    const result = await runInit({ projectRoot, force: true, skipImport: true }, deps);
+    assert.equal(result.ok, true);
+    assert.equal(savedCount, 0);
+
+    const configValue = expectOk(await readConfig(projectRoot, adapter));
+    assert.equal(configValue.keyId, 'existing-key');
+
+    const decrypted = expectOk(await readEncEnv('development', originalKey, projectRoot, adapter));
+    assert.deepEqual(decrypted, { KEEP: 'yes' });
+  });
+
   void it('does not overwrite existing encrypted env files', async () => {
     const adapter = createFilesystemAdapter(projectRoot);
     const existingKey = 'a'.repeat(64);
-    await writeEncEnv('development', { KEEP: 'yes' }, existingKey, projectRoot, adapter);
+    const saveOriginal = await import('../keystore.js').then(({ saveKey }) =>
+      saveKey('existing-key', existingKey),
+    );
+    assert.equal(saveOriginal.ok, true);
+
+    const writeExisting = await writeEncEnv(
+      'development',
+      { KEEP: 'yes' },
+      existingKey,
+      projectRoot,
+      adapter,
+    );
+    assert.equal(writeExisting.ok, true);
+
+    await fs.writeFile(
+      path.join(projectRoot, 'envlt.config.json'),
+      `${JSON.stringify({ appName: 'oldapp', envs: ['development'], keyId: 'existing-key' })}
+`,
+      'utf8',
+    );
 
     const writes: string[] = [];
     const prompter = new FakePrompter([
+      { kind: 'confirm', value: true },
       { kind: 'input', value: 'myapp' },
       { kind: 'checkbox', value: ['development'] },
       { kind: 'input', value: '' },

@@ -3,8 +3,13 @@ import * as path from 'node:path';
 import inquirer from 'inquirer';
 
 import { generateGithubActionsWorkflow } from '../ci/github-actions.js';
-import { writeConfig } from '../config.js';
-import { CONFIG_FILE_NAME, ENV_NAME_PATTERN, GITIGNORE_ADDITIONS } from '../constants.js';
+import { readConfig, writeConfig } from '../config.js';
+import {
+  APP_NAME_MAX_LENGTH,
+  CONFIG_FILE_NAME,
+  ENV_NAME_PATTERN,
+  GITIGNORE_ADDITIONS,
+} from '../constants.js';
 import { generateKey } from '../crypto.js';
 import { parseEnv, resolveEncEnvPath, writeEncEnv, type EnvVars } from '../envfile.js';
 import { AppError, ErrorCode } from '../errors.js';
@@ -14,7 +19,6 @@ import { err, ok, type Result } from '../result.js';
 import { createFilesystemAdapter, type StorageAdapter } from '../storage/index.js';
 
 const APP_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/u;
-const APP_NAME_MAX_LENGTH = 64;
 const DEFAULT_ENVS = ['development', 'staging', 'production'] as const;
 const KEY_ID_SUFFIX_LENGTH = 8;
 const KEY_ID_MAX_LENGTH = 64;
@@ -28,6 +32,12 @@ type InitDependencies = {
   readonly now: () => number;
   readonly saveGeneratedKey: (keyId: string, key: string) => Promise<Result<void>>;
   readonly writeStdout: (message: string) => void;
+};
+
+type KeyMaterial = {
+  readonly keyId: string;
+  readonly key: string;
+  readonly generated: boolean;
 };
 
 export type InitOptions = {
@@ -237,41 +247,51 @@ async function writeGitignore(projectRoot: string, adapter: StorageAdapter): Pro
   return adapter.write(gitignorePath, Buffer.from(next, 'utf8'));
 }
 
-export async function runInit(
-  options: InitOptions,
-  dependencies: InitDependencies = DEFAULT_DEPENDENCIES,
-): Promise<Result<void>> {
-  const adapter = dependencies.createAdapter(options.projectRoot);
-  const configPath = path.resolve(options.projectRoot, CONFIG_FILE_NAME);
-  const configExists = await adapter.exists(configPath);
-  if (!configExists.ok) {
-    return err(configExists.error);
-  }
+async function hasExistingEnvFiles(
+  envs: readonly string[],
+  projectRoot: string,
+  adapter: StorageAdapter,
+): Promise<Result<boolean>> {
+  for (const envName of envs) {
+    const encPathResult = resolveEncEnvPath(envName, projectRoot);
+    if (!encPathResult.ok) {
+      return err(encPathResult.error);
+    }
 
-  if (configExists.value && options.force !== true) {
-    const shouldOverwrite = await dependencies.prompter.confirm(
-      'Config already exists. Overwrite?',
-      false,
-    );
-    if (!shouldOverwrite) {
-      logger.info('Initialization cancelled.');
-      return ok(undefined);
+    const existsResult = await adapter.exists(encPathResult.value);
+    if (!existsResult.ok) {
+      return err(existsResult.error);
+    }
+
+    if (existsResult.value) {
+      return ok(true);
     }
   }
 
-  const defaultAppName = path.basename(path.resolve(options.projectRoot));
-  const appName = await dependencies.prompter.input('App name:', defaultAppName, validateAppName);
+  return ok(false);
+}
 
-  const envs = await chooseEnvs(dependencies.prompter);
-  if (envs.length === 0) {
-    return err(new AppError(ErrorCode.CONFIG_INVALID, 'At least one environment is required.'));
+async function loadExistingKeyMaterial(
+  projectRoot: string,
+  adapter: StorageAdapter,
+): Promise<Result<KeyMaterial>> {
+  const configResult = await readConfig(projectRoot, adapter);
+  if (!configResult.ok) {
+    return err(configResult.error);
   }
 
-  const imported = await importLocalEnv(envs, options, adapter, dependencies.prompter);
-  if (!imported.ok) {
-    return err(imported.error);
+  const loadedKey = await loadKey(configResult.value.keyId);
+  if (!loadedKey.ok) {
+    return err(loadedKey.error);
   }
 
+  return ok({ keyId: configResult.value.keyId, key: loadedKey.value, generated: false });
+}
+
+async function generateKeyMaterial(
+  appName: string,
+  dependencies: InitDependencies,
+): Promise<Result<KeyMaterial>> {
   const key = dependencies.keyGenerator();
   const keyIdResult = await ensureUniqueKeyId(appName, dependencies.now());
   if (!keyIdResult.ok) {
@@ -283,8 +303,35 @@ export async function runInit(
     return err(saveResult.error);
   }
 
+  return ok({ keyId: keyIdResult.value, key, generated: true });
+}
+
+async function resolveKeyMaterial(
+  appName: string,
+  envs: readonly string[],
+  projectRoot: string,
+  adapter: StorageAdapter,
+  dependencies: InitDependencies,
+): Promise<Result<KeyMaterial>> {
+  const hasExisting = await hasExistingEnvFiles(envs, projectRoot, adapter);
+  if (!hasExisting.ok) {
+    return err(hasExisting.error);
+  }
+
+  return hasExisting.value
+    ? loadExistingKeyMaterial(projectRoot, adapter)
+    : generateKeyMaterial(appName, dependencies);
+}
+
+async function writeMissingEnvFiles(
+  envs: readonly string[],
+  assignments: Readonly<Record<string, EnvVars>>,
+  key: string,
+  projectRoot: string,
+  adapter: StorageAdapter,
+): Promise<Result<void>> {
   for (const envName of envs) {
-    const encPathResult = resolveEncEnvPath(envName, options.projectRoot);
+    const encPathResult = resolveEncEnvPath(envName, projectRoot);
     if (!encPathResult.ok) {
       return err(encPathResult.error);
     }
@@ -294,37 +341,25 @@ export async function runInit(
       return err(envExists.error);
     }
 
-    if (envExists.value) {
-      continue;
-    }
-
-    const writeResult = await writeEncEnv(
-      envName,
-      imported.value[envName] ?? {},
-      key,
-      options.projectRoot,
-      adapter,
-    );
-    if (!writeResult.ok) {
-      return err(writeResult.error);
+    if (!envExists.value) {
+      const writeResult = await writeEncEnv(
+        envName,
+        assignments[envName] ?? {},
+        key,
+        projectRoot,
+        adapter,
+      );
+      if (!writeResult.ok) {
+        return err(writeResult.error);
+      }
     }
   }
 
-  const configResult = await writeConfig(
-    { appName, envs, keyId: keyIdResult.value },
-    options.projectRoot,
-    adapter,
-  );
-  if (!configResult.ok) {
-    return err(configResult.error);
-  }
+  return ok(undefined);
+}
 
-  const gitignoreResult = await writeGitignore(options.projectRoot, adapter);
-  if (!gitignoreResult.ok) {
-    return err(gitignoreResult.error);
-  }
-
-  const showKey = [
+function printGeneratedKey(key: string, writeStdout: (message: string) => void): void {
+  const message = [
     '─────────────────────────────────────────────────────',
     '  Your master key (SAVE THIS — shown only once):',
     '',
@@ -337,22 +372,131 @@ export async function runInit(
     `To use in CI, set secret ENVLT_KEY=${key}`,
     '',
   ].join('\n');
-  dependencies.writeStdout(showKey);
 
-  const createWorkflow = await dependencies.prompter.confirm(
-    'Generate GitHub Actions workflow?',
-    true,
-  );
-  if (createWorkflow) {
-    const workflowResult = await generateGithubActionsWorkflow(envs, options.projectRoot, adapter);
-    if (!workflowResult.ok) {
-      return err(workflowResult.error);
-    }
+  writeStdout(message);
+}
+
+async function maybeGenerateWorkflow(
+  envs: readonly string[],
+  projectRoot: string,
+  adapter: StorageAdapter,
+  prompter: Prompter,
+): Promise<Result<void>> {
+  const createWorkflow = await prompter.confirm('Generate GitHub Actions workflow?', true);
+  if (!createWorkflow) {
+    return ok(undefined);
   }
 
+  return generateGithubActionsWorkflow(envs, projectRoot, adapter);
+}
+
+async function shouldContinueInit(
+  options: InitOptions,
+  adapter: StorageAdapter,
+  prompter: Prompter,
+): Promise<Result<boolean>> {
+  const configPath = path.resolve(options.projectRoot, CONFIG_FILE_NAME);
+  const configExists = await adapter.exists(configPath);
+  if (!configExists.ok) {
+    return err(configExists.error);
+  }
+
+  if (!configExists.value || options.force === true) {
+    return ok(true);
+  }
+
+  const shouldOverwrite = await prompter.confirm('Config already exists. Overwrite?', false);
+  if (!shouldOverwrite) {
+    logger.info('Initialization cancelled.');
+    return ok(false);
+  }
+
+  return ok(true);
+}
+
+function printSummary(appName: string, envs: readonly string[]): void {
   logger.success('Initialized envlt configuration.');
   logger.info(`App: ${appName}`);
   logger.info(`Environments: ${envs.join(', ')}`);
   logger.info(`Config: ${CONFIG_FILE_NAME}`);
+}
+
+export async function runInit(
+  options: InitOptions,
+  dependencies: InitDependencies = DEFAULT_DEPENDENCIES,
+): Promise<Result<void>> {
+  const adapter = dependencies.createAdapter(options.projectRoot);
+  const proceedResult = await shouldContinueInit(options, adapter, dependencies.prompter);
+  if (!proceedResult.ok) {
+    return err(proceedResult.error);
+  }
+
+  if (!proceedResult.value) {
+    return ok(undefined);
+  }
+
+  const defaultAppName = path.basename(path.resolve(options.projectRoot));
+  const appName = await dependencies.prompter.input('App name:', defaultAppName, validateAppName);
+  const envs = await chooseEnvs(dependencies.prompter);
+  if (envs.length === 0) {
+    return err(new AppError(ErrorCode.CONFIG_INVALID, 'At least one environment is required.'));
+  }
+
+  const imported = await importLocalEnv(envs, options, adapter, dependencies.prompter);
+  if (!imported.ok) {
+    return err(imported.error);
+  }
+
+  const keyMaterialResult = await resolveKeyMaterial(
+    appName,
+    envs,
+    options.projectRoot,
+    adapter,
+    dependencies,
+  );
+  if (!keyMaterialResult.ok) {
+    return err(keyMaterialResult.error);
+  }
+
+  const writeEnvsResult = await writeMissingEnvFiles(
+    envs,
+    imported.value,
+    keyMaterialResult.value.key,
+    options.projectRoot,
+    adapter,
+  );
+  if (!writeEnvsResult.ok) {
+    return err(writeEnvsResult.error);
+  }
+
+  const configResult = await writeConfig(
+    { appName, envs, keyId: keyMaterialResult.value.keyId },
+    options.projectRoot,
+    adapter,
+  );
+  if (!configResult.ok) {
+    return err(configResult.error);
+  }
+
+  const gitignoreResult = await writeGitignore(options.projectRoot, adapter);
+  if (!gitignoreResult.ok) {
+    return err(gitignoreResult.error);
+  }
+
+  if (keyMaterialResult.value.generated) {
+    printGeneratedKey(keyMaterialResult.value.key, dependencies.writeStdout);
+  }
+
+  const workflowResult = await maybeGenerateWorkflow(
+    envs,
+    options.projectRoot,
+    adapter,
+    dependencies.prompter,
+  );
+  if (!workflowResult.ok) {
+    return err(workflowResult.error);
+  }
+
+  printSummary(appName, envs);
   return ok(undefined);
 }
