@@ -10,11 +10,11 @@ import { err, ok, type Result } from '../result.js';
 import { createFilesystemAdapter } from '../storage/index.js';
 import { validateEnvVarKey } from '../validation/env-key.js';
 
-export interface SetOptions {
+export type SetOptions = {
   readonly env: string;
   readonly projectRoot: string;
   readonly keyId?: string;
-}
+};
 
 type FileOps = {
   readonly writeFile: typeof fs.writeFile;
@@ -29,11 +29,6 @@ const DEFAULT_FILE_OPS: FileOps = {
   rename: fs.rename,
   rm: fs.rm,
 };
-let fileOps: FileOps = DEFAULT_FILE_OPS;
-
-export function setFileOpsForTesting(ops: FileOps | undefined): void {
-  fileOps = ops ?? DEFAULT_FILE_OPS;
-}
 
 function parseAssignment(assignment: string): Result<readonly [string, string]> {
   const separatorIndex = assignment.indexOf(ASSIGNMENT_SEPARATOR);
@@ -75,6 +70,7 @@ async function writeEncEnvAtomically(
   vars: EnvVars,
   keyHex: string,
   projectRoot: string,
+  fileOps: FileOps = DEFAULT_FILE_OPS,
 ): Promise<Result<void>> {
   const filePath = path.resolve(projectRoot, encEnvFileName(envName));
   const tmpPath = `${filePath}${TEMP_FILE_SUFFIX}`;
@@ -93,6 +89,7 @@ async function writeEncEnvAtomically(
 export async function runSet(
   assignments: readonly string[],
   options: SetOptions,
+  fileOps: FileOps = DEFAULT_FILE_OPS,
 ): Promise<Result<void>> {
   const adapter = createFilesystemAdapter(options.projectRoot);
   const configResult = await readConfig(options.projectRoot, adapter);
@@ -127,5 +124,11 @@ export async function runSet(
     mergedVars[key] = value;
   }
 
-  return writeEncEnvAtomically(options.env, mergedVars, keyResult.value, options.projectRoot);
+  return writeEncEnvAtomically(
+    options.env,
+    mergedVars,
+    keyResult.value,
+    options.projectRoot,
+    fileOps,
+  );
 }

@@ -15,6 +15,7 @@ import { createFilesystemAdapter } from '../storage/index.js';
 
 let projectRoot = '';
 let tempHome = '';
+let originalHome: string | undefined;
 const repoRoot = path.resolve('.');
 const useModuleUrl = pathToFileURL(path.resolve('src/commands/use.ts')).href;
 const nodeExec = process.execPath;
@@ -75,6 +76,7 @@ async function setupFixture(): Promise<void> {
 }
 
 beforeEach(async () => {
+  originalHome = process.env['HOME'];
   projectRoot = path.join(os.tmpdir(), randomUUID());
   tempHome = path.join(os.tmpdir(), randomUUID());
   await fs.mkdir(projectRoot, { recursive: true });
@@ -82,6 +84,12 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  if (originalHome === undefined) {
+    delete process.env['HOME'];
+  } else {
+    process.env['HOME'] = originalHome;
+  }
+
   await fs.rm(projectRoot, { recursive: true, force: true });
   await fs.rm(tempHome, { recursive: true, force: true });
 });
@@ -109,6 +117,7 @@ void describe('commands/use', () => {
     ]);
 
     const result = await runNode(script, { ...process.env, HOME: tempHome, PARENT_ONLY: 'hidden' });
+    assert.equal(result.code, EXIT_CODES.SUCCESS);
     assert.equal(result.stdout, '');
   });
 

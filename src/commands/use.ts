@@ -8,12 +8,12 @@ import { loadKey } from '../keystore.js';
 import { logger } from '../logger.js';
 import { createFilesystemAdapter } from '../storage/index.js';
 
-export interface UseOptions {
+export type UseOptions = {
   readonly env: string;
   readonly projectRoot: string;
   readonly keyId?: string;
   readonly passthrough?: boolean;
-}
+};
 
 function createChildEnv(
   passthrough: boolean,

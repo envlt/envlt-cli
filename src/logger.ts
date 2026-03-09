@@ -22,12 +22,12 @@ const COLOR_LEVELS: Readonly<Record<Exclude<LogLevel, 'info'>, (value: string) =
   debug: chalk.gray,
 };
 
-function shouldDisableColor(options: LoggerOptions | undefined): boolean {
+function shouldDisableColor(options: LoggerOptions | undefined, isTty: boolean): boolean {
   if (options?.noColor !== undefined) {
     return options.noColor;
   }
 
-  return process.env['NO_COLOR'] !== undefined || !process.stdout.isTTY;
+  return process.env['NO_COLOR'] !== undefined || !isTty;
 }
 
 function formatMessage(level: LogLevel, message: string, disableColor: boolean): string {
@@ -40,27 +40,31 @@ function formatMessage(level: LogLevel, message: string, disableColor: boolean):
 
 export function createLogger(options?: LoggerOptions): Logger {
   const quiet = options?.quiet ?? false;
-  const disableColor = shouldDisableColor(options);
 
   return {
     info(message: string): void {
       if (!quiet) {
+        const disableColor = shouldDisableColor(options, process.stdout.isTTY);
         process.stdout.write(`${formatMessage('info', message, disableColor)}\n`);
       }
     },
     success(message: string): void {
       if (!quiet) {
+        const disableColor = shouldDisableColor(options, process.stdout.isTTY);
         process.stdout.write(`${formatMessage('success', message, disableColor)}\n`);
       }
     },
     warn(message: string): void {
-      process.stdout.write(`${formatMessage('warn', message, disableColor)}\n`);
+      const disableColor = shouldDisableColor(options, process.stderr.isTTY);
+      process.stderr.write(`${formatMessage('warn', message, disableColor)}\n`);
     },
     error(message: string): void {
+      const disableColor = shouldDisableColor(options, process.stderr.isTTY);
       process.stderr.write(`${formatMessage('error', message, disableColor)}\n`);
     },
     debug(message: string): void {
       if (!quiet) {
+        const disableColor = shouldDisableColor(options, process.stdout.isTTY);
         process.stdout.write(`${formatMessage('debug', message, disableColor)}\n`);
       }
     },

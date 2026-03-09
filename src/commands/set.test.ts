@@ -6,7 +6,6 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 
 import { generateKey } from '../crypto.js';
-import { runSet, setFileOpsForTesting } from './set.js';
 import { writeConfig, type EnvltConfig } from '../config.js';
 import { readEncEnv } from '../envfile.js';
 import { AppError, ErrorCode } from '../errors.js';
@@ -14,8 +13,11 @@ import { saveKey } from '../keystore.js';
 import type { Result } from '../result.js';
 import { createFilesystemAdapter } from '../storage/index.js';
 
+import { runSet } from './set.js';
+
 let projectRoot = '';
 let tempHome = '';
+let originalHome: string | undefined;
 
 function expectOk<T>(result: Result<T>): T {
   if (!result.ok) {
@@ -44,6 +46,7 @@ async function writeMinimalConfig(projectDir: string, keyId: string): Promise<vo
 }
 
 beforeEach(async () => {
+  originalHome = process.env['HOME'];
   projectRoot = path.join(os.tmpdir(), randomUUID());
   tempHome = path.join(os.tmpdir(), randomUUID());
   await fs.mkdir(projectRoot, { recursive: true });
@@ -52,7 +55,12 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  setFileOpsForTesting(undefined);
+  if (originalHome === undefined) {
+    delete process.env['HOME'];
+  } else {
+    process.env['HOME'] = originalHome;
+  }
+
   await fs.rm(projectRoot, { recursive: true, force: true });
   await fs.rm(tempHome, { recursive: true, force: true });
 });
@@ -126,13 +134,15 @@ void describe('commands/set', () => {
     await writeMinimalConfig(projectRoot, 'main');
     expectOk(await runSet(['FOO=original'], { env: 'test', projectRoot }));
 
-    setFileOpsForTesting({
-      writeFile: fs.writeFile,
-      rename: () => Promise.reject(new Error('rename failed')),
-      rm: fs.rm,
-    });
-    const result = await runSet(['FOO=updated'], { env: 'test', projectRoot });
-    setFileOpsForTesting(undefined);
+    const result = await runSet(
+      ['FOO=updated'],
+      { env: 'test', projectRoot },
+      {
+        writeFile: fs.writeFile,
+        rename: () => Promise.reject(new Error('rename failed')),
+        rm: fs.rm,
+      },
+    );
 
     assert.equal(expectErrorCode(result), ErrorCode.STORAGE_WRITE_ERROR);
     const vars = expectOk(

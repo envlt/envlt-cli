@@ -1,15 +1,31 @@
 import * as assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, it } from 'node:test';
-import { spawn } from 'node:child_process';
 
 const DIST_BIN_PATH = path.resolve('dist/bin/envlt.js');
+const REPO_ROOT = path.resolve('.');
 
 let projectRoot = '';
 let tempHome = '';
+let isBuilt = false;
+
+async function runBuild(): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn('npm', ['run', 'build'], { cwd: REPO_ROOT, stdio: 'inherit' });
+    child.on('close', (code: number | null) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(new Error(`Build failed with exit code ${String(code)}`));
+    });
+  });
+}
 
 async function runCli(
   args: readonly string[],
@@ -30,6 +46,11 @@ async function runCli(
 }
 
 beforeEach(async () => {
+  if (!isBuilt) {
+    await runBuild();
+    isBuilt = true;
+  }
+
   projectRoot = path.join(os.tmpdir(), randomUUID());
   tempHome = path.join(os.tmpdir(), randomUUID());
   await fs.mkdir(projectRoot, { recursive: true });
