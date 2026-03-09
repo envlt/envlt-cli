@@ -17,7 +17,7 @@ export type DeclareOptions = {
 export async function runDeclare(key: string, options: DeclareOptions): Promise<Result<void>> {
   const validationResult = validateKey(key, options.customDictionary);
   if (!validationResult.valid) {
-    return err(new AppError(ErrorCode.SET_INVALID_ASSIGNMENT, validationResult.error));
+    return err(new AppError(ErrorCode.DECLARE_INVALID_KEY, validationResult.error));
   }
 
   for (const warning of validationResult.warnings) {

@@ -67,6 +67,13 @@ void describe('validation/keys', () => {
     });
   });
 
+  void it('does ignore invalid custom dictionary entries for suggestions', () => {
+    assert.deepEqual(validateKey('MY_CUSTM_VAR', ['my_custom_var', '_BAD', 'MY_CUSTOM_VAR']), {
+      valid: true,
+      warnings: ['Did you mean MY_CUSTOM_VAR?'],
+    });
+  });
+
   void it('does parse assignment for simple value', () => {
     assert.deepEqual(expectOk(parseAssignment('FOO=bar')), {
       key: 'FOO',

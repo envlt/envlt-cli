@@ -14,6 +14,9 @@ const DOUBLE_UNDERSCORE = '__';
 const MAX_SUGGESTION_DISTANCE = 2;
 const MAX_SUGGESTION_LENGTH_DELTA = 3;
 const ASSIGNMENT_SEPARATOR = '=';
+const EMPTY_WARNINGS: readonly string[] = [];
+
+const dictionaryCache = new WeakMap<readonly string[], readonly string[]>();
 
 function suggestionMessage(suggestion: string): string {
   return `Did you mean ${suggestion}?`;
@@ -21,6 +24,26 @@ function suggestionMessage(suggestion: string): string {
 
 function invalidKey(message: string): KeyValidationResult {
   return { valid: false, error: message };
+}
+
+function validateKeySyntax(key: string): KeyValidationResult {
+  if (key.length > MAX_KEY_LENGTH) {
+    return invalidKey(`Invalid key "${key}". Key length must be <= ${String(MAX_KEY_LENGTH)}.`);
+  }
+
+  if (!KEY_PATTERN.test(key)) {
+    return invalidKey(`Invalid key "${key}". Expected UPPER_SNAKE_CASE format.`);
+  }
+
+  if (key.endsWith('_')) {
+    return invalidKey(`Invalid key "${key}". Key must not end with underscore.`);
+  }
+
+  if (key.includes(DOUBLE_UNDERSCORE)) {
+    return invalidKey(`Invalid key "${key}". Key must not contain consecutive underscores.`);
+  }
+
+  return { valid: true, warnings: EMPTY_WARNINGS };
 }
 
 function findSuggestion(key: string, dictionary: readonly string[]): string | undefined {
@@ -46,10 +69,31 @@ function findSuggestion(key: string, dictionary: readonly string[]): string | un
   return closestMatch;
 }
 
-function mergedDictionary(customDictionary: readonly string[] | undefined): readonly string[] {
-  return customDictionary === undefined
-    ? KNOWN_KEYS
-    : [...new Set([...KNOWN_KEYS, ...customDictionary])];
+function toValidDictionaryEntry(entry: string): string | undefined {
+  return validateKeySyntax(entry).valid ? entry : undefined;
+}
+
+function mergeDictionaries(customDictionary: readonly string[] | undefined): readonly string[] {
+  if (customDictionary === undefined) {
+    return KNOWN_KEYS;
+  }
+
+  const cached = dictionaryCache.get(customDictionary);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const merged = new Set<string>(KNOWN_KEYS);
+  for (const entry of customDictionary) {
+    const validEntry = toValidDictionaryEntry(entry);
+    if (validEntry !== undefined) {
+      merged.add(validEntry);
+    }
+  }
+
+  const mergedArray = [...merged];
+  dictionaryCache.set(customDictionary, mergedArray);
+  return mergedArray;
 }
 
 /**
@@ -59,33 +103,20 @@ export function validateKey(
   key: string,
   customDictionary?: readonly string[],
 ): KeyValidationResult {
-  if (key.length > MAX_KEY_LENGTH) {
-    return invalidKey(`Invalid key "${key}". Key length must be <= ${String(MAX_KEY_LENGTH)}.`);
+  const syntaxResult = validateKeySyntax(key);
+  if (!syntaxResult.valid) {
+    return syntaxResult;
   }
 
-  if (!KEY_PATTERN.test(key)) {
-    return invalidKey(`Invalid key "${key}". Expected UPPER_SNAKE_CASE format.`);
-  }
-
-  if (key.startsWith('_') || key.endsWith('_')) {
-    return invalidKey(`Invalid key "${key}". Key must not start or end with underscore.`);
-  }
-
-  if (key.includes(DOUBLE_UNDERSCORE)) {
-    return invalidKey(`Invalid key "${key}". Key must not contain consecutive underscores.`);
-  }
-
-  const dictionary = mergedDictionary(customDictionary);
+  const dictionary = mergeDictionaries(customDictionary);
   if (dictionary.includes(key)) {
-    return { valid: true, warnings: [] };
+    return { valid: true, warnings: EMPTY_WARNINGS };
   }
 
   const suggestion = findSuggestion(key, dictionary);
-  if (suggestion === undefined) {
-    return { valid: true, warnings: [] };
-  }
-
-  return { valid: true, warnings: [suggestionMessage(suggestion)] };
+  return suggestion === undefined
+    ? { valid: true, warnings: EMPTY_WARNINGS }
+    : { valid: true, warnings: [suggestionMessage(suggestion)] };
 }
 
 /**

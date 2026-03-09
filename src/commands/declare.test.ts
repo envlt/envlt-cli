@@ -5,6 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 
+import { ErrorCode } from '../errors.js';
 import type { Manifest } from '../manifest.js';
 import type { Result } from '../result.js';
 
@@ -132,12 +133,16 @@ void describe('commands/declare', { concurrency: false }, () => {
     assert.equal(result.ok, false);
   });
 
-  void it('does return error when key format is invalid', async () => {
+  void it('does return DECLARE_INVALID_KEY when key format is invalid', async () => {
     const result = await runDeclare('not-valid', {
       description: 'Invalid key',
       projectRoot,
     });
 
-    assert.equal(result.ok, false);
+    if (result.ok) {
+      assert.fail('Expected declare to fail for invalid key format.');
+    }
+
+    assert.equal(result.error.code, ErrorCode.DECLARE_INVALID_KEY);
   });
 });
