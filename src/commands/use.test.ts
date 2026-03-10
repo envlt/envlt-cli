@@ -24,13 +24,19 @@ const nodeExec = process.execPath;
 type RunNodeResult = {
   readonly code: number;
   readonly stdout: string;
+  readonly stderr: string;
 };
 
-function createRunUseScript(commandItems: readonly string[], passthrough?: boolean): string {
+function createRunUseScript(
+  commandItems: readonly string[],
+  passthrough?: boolean,
+  strictShared?: boolean,
+): string {
   const commandLiteral = JSON.stringify(commandItems);
   const projectRootLiteral = JSON.stringify(projectRoot);
   const passthroughFragment = passthrough === true ? ', passthrough: true' : '';
-  return `(async () => { const { runUse } = await import('${useModuleUrl}'); const code = await runUse(${commandLiteral}, { env: 'test', projectRoot: ${projectRootLiteral}${passthroughFragment} }); process.exit(code); })();`;
+  const strictSharedFragment = strictShared === true ? ', strictShared: true' : '';
+  return `(async () => { const { runUse } = await import('${useModuleUrl}'); const code = await runUse(${commandLiteral}, { env: 'test', projectRoot: ${projectRootLiteral}${passthroughFragment}${strictSharedFragment} }); process.exit(code); })();`;
 }
 
 function runNode(script: string, env: NodeJS.ProcessEnv): Promise<RunNodeResult> {
@@ -40,12 +46,16 @@ function runNode(script: string, env: NodeJS.ProcessEnv): Promise<RunNodeResult>
       cwd: repoRoot,
     });
     let stdout = '';
+    let stderr = '';
 
     child.stdout.on('data', (chunk: Buffer) => {
       stdout += chunk.toString('utf8');
     });
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString('utf8');
+    });
     child.on('close', (code: number | null) => {
-      resolve({ code: code ?? -1, stdout });
+      resolve({ code: code ?? -1, stdout, stderr });
     });
   });
 }
@@ -218,6 +228,54 @@ void describe('commands/use', () => {
     }
 
     const script = createRunUseScript([nodeExec, '-e', 'process.exit(0)']);
+    const result = await runNode(script, { ...process.env, HOME: tempHome, USERPROFILE: tempHome });
+    assert.equal(result.code, EXIT_CODES.DECRYPTION_FAILED);
+  });
+
+  void it('does continue in non-strict mode when shared extends fails', async () => {
+    await setupFixture();
+    const adapter = createFilesystemAdapter(projectRoot);
+    const config: EnvltConfig = {
+      appName: 'envlt',
+      envs: ['test'],
+      keyId: 'main',
+      extends: ['github:missing/repo/path'],
+    };
+    const configResult = await writeConfig(config, projectRoot, adapter);
+    if (!configResult.ok) {
+      throw configResult.error;
+    }
+
+    const script = createRunUseScript([
+      nodeExec,
+      '-e',
+      "process.stdout.write(process.env.FOO ?? '')",
+    ]);
+    const result = await runNode(script, { ...process.env, HOME: tempHome, USERPROFILE: tempHome });
+    assert.equal(result.code, EXIT_CODES.SUCCESS);
+    assert.equal(result.stdout, 'bar');
+    assert.match(result.stderr, /Shared secrets unavailable/u);
+  });
+
+  void it('does fail in strict mode when shared extends fails', async () => {
+    await setupFixture();
+    const adapter = createFilesystemAdapter(projectRoot);
+    const config: EnvltConfig = {
+      appName: 'envlt',
+      envs: ['test'],
+      keyId: 'main',
+      extends: ['github:missing/repo/path'],
+    };
+    const configResult = await writeConfig(config, projectRoot, adapter);
+    if (!configResult.ok) {
+      throw configResult.error;
+    }
+
+    const script = createRunUseScript(
+      [nodeExec, '-e', "process.stdout.write(process.env.FOO ?? '')"],
+      false,
+      true,
+    );
     const result = await runNode(script, { ...process.env, HOME: tempHome, USERPROFILE: tempHome });
     assert.equal(result.code, EXIT_CODES.DECRYPTION_FAILED);
   });
