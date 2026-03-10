@@ -86,6 +86,21 @@ void describe('shared/cache', () => {
     assert.equal(result.error.code, ErrorCode.SHARED_GIT_ERROR);
   });
 
+  void it('does return SHARED_GIT_ERROR when git pull fails for existing cache', async () => {
+    const repoDir = path.join(cacheRoot, 'my-org__secrets');
+    await fs.mkdir(repoDir, { recursive: true });
+
+    const runner: GitRunner = (): Promise<Result<string>> =>
+      Promise.resolve(err(new AppError(ErrorCode.SHARED_GIT_ERROR, 'pull failed')));
+
+    const result = await ensureCachedRepo('my-org', 'secrets', cacheRoot, runner);
+    if (result.ok) {
+      assert.fail('Expected pull failure result');
+    }
+
+    assert.equal(result.error.code, ErrorCode.SHARED_GIT_ERROR);
+  });
+
   void it('does return SHARED_TIMEOUT when git hangs', async () => {
     const runner: GitRunner = (): Promise<Result<string>> =>
       Promise.resolve(err(new AppError(ErrorCode.SHARED_TIMEOUT, 'timed out')));
@@ -183,5 +198,63 @@ void describe('shared/cache', () => {
     assert.equal(result.ok, true);
 
     await assert.rejects(fs.access(cacheDir));
+  });
+
+  void it('does return STORAGE_DELETE_ERROR when clearing single repo cache fails', async () => {
+    const badHomePath = path.join(cacheRoot, 'bad-home');
+    await fs.writeFile(badHomePath, 'not-a-directory', 'utf8');
+    const previousHome = process.env['HOME'];
+    const previousUserProfile = process.env['USERPROFILE'];
+    process.env['HOME'] = badHomePath;
+    process.env['USERPROFILE'] = badHomePath;
+
+    try {
+      const result = await clearCachedRepo('org', 'repo');
+      if (result.ok) {
+        assert.fail('Expected delete error');
+      }
+
+      assert.equal(result.error.code, ErrorCode.STORAGE_DELETE_ERROR);
+    } finally {
+      if (previousHome === undefined) {
+        delete process.env['HOME'];
+      } else {
+        process.env['HOME'] = previousHome;
+      }
+      if (previousUserProfile === undefined) {
+        delete process.env['USERPROFILE'];
+      } else {
+        process.env['USERPROFILE'] = previousUserProfile;
+      }
+    }
+  });
+
+  void it('does return STORAGE_DELETE_ERROR when clearing all cache fails', async () => {
+    const badHomePath = path.join(cacheRoot, 'bad-home');
+    await fs.writeFile(badHomePath, 'not-a-directory', 'utf8');
+    const previousHome = process.env['HOME'];
+    const previousUserProfile = process.env['USERPROFILE'];
+    process.env['HOME'] = badHomePath;
+    process.env['USERPROFILE'] = badHomePath;
+
+    try {
+      const result = await clearAllCache();
+      if (result.ok) {
+        assert.fail('Expected delete error');
+      }
+
+      assert.equal(result.error.code, ErrorCode.STORAGE_DELETE_ERROR);
+    } finally {
+      if (previousHome === undefined) {
+        delete process.env['HOME'];
+      } else {
+        process.env['HOME'] = previousHome;
+      }
+      if (previousUserProfile === undefined) {
+        delete process.env['USERPROFILE'];
+      } else {
+        process.env['USERPROFILE'] = previousUserProfile;
+      }
+    }
   });
 });
