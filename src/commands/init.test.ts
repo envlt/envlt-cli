@@ -378,6 +378,23 @@ void describe('commands/init', () => {
     assert.deepEqual(existing, { KEEP: 'yes' });
   });
 
+  void it('does create gitignore without a leading blank line when file is missing', async () => {
+    const writes: string[] = [];
+    const prompter = new FakePrompter([
+      { kind: 'input', value: 'myapp' },
+      { kind: 'checkbox', value: ['development'] },
+      { kind: 'input', value: '' },
+      { kind: 'confirm', value: false },
+    ]);
+
+    const result = await runInit({ projectRoot, skipImport: true }, withDeps(prompter, writes));
+    assert.equal(result.ok, true);
+
+    const gitignore = await fs.readFile(path.join(projectRoot, '.gitignore'), 'utf8');
+    assert.equal(gitignore.startsWith('\n'), false);
+    assert.match(gitignore, /^# envlt\n/u);
+  });
+
   void it('does append gitignore additions without duplication', async () => {
     await fs.writeFile(path.join(projectRoot, '.gitignore'), '# existing\n.env.local\n', 'utf8');
 

@@ -243,7 +243,8 @@ async function writeGitignore(projectRoot: string, adapter: StorageAdapter): Pro
   }
 
   const base = current.value.toString('utf8').trimEnd();
-  const next = `${base}\n${base === '' ? '' : '\n'}${missing.join('\n')}\n`;
+  const additions = `${missing.join('\n')}\n`;
+  const next = base === '' ? additions : `${base}\n\n${additions}`;
   return adapter.write(gitignorePath, Buffer.from(next, 'utf8'));
 }
 
