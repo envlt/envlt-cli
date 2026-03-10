@@ -10,6 +10,7 @@ import { runEdit } from '../src/commands/edit.js';
 import { runInit } from '../src/commands/init.js';
 import { runHooksInstall, runHooksStatus, runHooksUninstall } from '../src/commands/hooks.js';
 import { runSet } from '../src/commands/set.js';
+import { runSharedClearCache } from '../src/commands/shared.js';
 import { runUse } from '../src/commands/use.js';
 import { DEFAULT_ENV, EXIT_CODES } from '../src/constants.js';
 import { logger } from '../src/logger.js';
@@ -136,11 +137,12 @@ program
   .option('--env <name>', 'Environment name', DEFAULT_ENV)
   .option('--key-id <id>', 'Override key ID from config')
   .option('--passthrough', 'Inherit parent environment variables', false)
+  .option('--strict-shared', 'Fail when shared secrets cannot be resolved', false)
   .argument('<command...>', 'Command and args to run')
   .action(
     async (
       commandArgs: readonly string[],
-      opts: { env: string; keyId?: string; passthrough?: boolean },
+      opts: { env: string; keyId?: string; passthrough?: boolean; strictShared?: boolean },
     ) => {
       if (commandArgs.length === 0) {
         logger.error('Missing command to run.');
@@ -158,11 +160,25 @@ program
         env: opts.env,
         ...(opts.keyId !== undefined ? { keyId: opts.keyId } : {}),
         ...(opts.passthrough !== undefined ? { passthrough: opts.passthrough } : {}),
+        ...(opts.strictShared !== undefined ? { strictShared: opts.strictShared } : {}),
         projectRoot: path.resolve(process.cwd()),
       });
       process.exit(exitCode);
     },
   );
+
+const sharedProgram = program.command('shared').description('Manage shared secret cache');
+
+sharedProgram
+  .command('clear-cache')
+  .option('--repo <org/repo>', 'Clear cache for one repo only')
+  .action(async (opts: { repo?: string }) => {
+    const result = await runSharedClearCache(opts);
+    if (!result.ok) {
+      logger.error(result.error.message);
+      process.exit(EXIT_CODES.GENERAL_ERROR);
+    }
+  });
 
 const hooksProgram = program.command('hooks').description('Manage git hooks');
 

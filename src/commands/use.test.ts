@@ -4,7 +4,6 @@ import { spawn } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 
 import { EXIT_CODES } from '../constants.js';
@@ -18,34 +17,44 @@ let tempHome = '';
 let originalHome: string | undefined;
 let originalUserProfile: string | undefined;
 const repoRoot = path.resolve('.');
-const useModuleUrl = pathToFileURL(path.resolve('src/commands/use.ts')).href;
 const nodeExec = process.execPath;
 
 type RunNodeResult = {
   readonly code: number;
   readonly stdout: string;
+  readonly stderr: string;
 };
 
-function createRunUseScript(commandItems: readonly string[], passthrough?: boolean): string {
-  const commandLiteral = JSON.stringify(commandItems);
-  const projectRootLiteral = JSON.stringify(projectRoot);
-  const passthroughFragment = passthrough === true ? ', passthrough: true' : '';
-  return `(async () => { const { runUse } = await import('${useModuleUrl}'); const code = await runUse(${commandLiteral}, { env: 'test', projectRoot: ${projectRootLiteral}${passthroughFragment} }); process.exit(code); })();`;
-}
+const useFixturePath = path.resolve('tests/fixtures/run-use.ts');
 
-function runNode(script: string, env: NodeJS.ProcessEnv): Promise<RunNodeResult> {
+function runNode(
+  commandItems: readonly string[],
+  env: NodeJS.ProcessEnv,
+  passthrough?: boolean,
+  strictShared?: boolean,
+): Promise<RunNodeResult> {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, ['--import', 'tsx', '-e', script], {
-      env,
+    const child = spawn(process.execPath, ['--import', 'tsx', useFixturePath], {
+      env: {
+        ...env,
+        ENVLT_TEST_USE_COMMAND: JSON.stringify(commandItems),
+        ENVLT_TEST_USE_PROJECT_ROOT: projectRoot,
+        ENVLT_TEST_USE_PASSTHROUGH: passthrough === true ? '1' : '0',
+        ENVLT_TEST_USE_STRICT_SHARED: strictShared === true ? '1' : '0',
+      },
       cwd: repoRoot,
     });
     let stdout = '';
+    let stderr = '';
 
     child.stdout.on('data', (chunk: Buffer) => {
       stdout += chunk.toString('utf8');
     });
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString('utf8');
+    });
     child.on('close', (code: number | null) => {
-      resolve({ code: code ?? -1, stdout });
+      resolve({ code: code ?? -1, stdout, stderr });
     });
   });
 }
@@ -106,83 +115,80 @@ afterEach(async () => {
 void describe('commands/use', () => {
   void it('does spawn the command with decrypted vars in environment', async () => {
     await setupFixture();
-    const script = createRunUseScript([
-      nodeExec,
-      '-e',
-      "process.stdout.write(process.env.FOO ?? '')",
-    ]);
-
-    const result = await runNode(script, { ...process.env, HOME: tempHome, USERPROFILE: tempHome });
+    const result = await runNode([nodeExec, '-e', "process.stdout.write(process.env.FOO ?? '')"], {
+      ...process.env,
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+    });
     assert.equal(result.code, EXIT_CODES.SUCCESS);
     assert.equal(result.stdout, 'bar');
   });
 
   void it('does not pass parent env vars unless passthrough is true', async () => {
     await setupFixture();
-    const script = createRunUseScript([
-      nodeExec,
-      '-e',
-      "process.stdout.write(process.env.PARENT_ONLY ?? '')",
-    ]);
-
-    const result = await runNode(script, {
-      ...process.env,
-      HOME: tempHome,
-      USERPROFILE: tempHome,
-      PARENT_ONLY: 'hidden',
-    });
+    const result = await runNode(
+      [nodeExec, '-e', "process.stdout.write(process.env.PARENT_ONLY ?? '')"],
+      {
+        ...process.env,
+        HOME: tempHome,
+        USERPROFILE: tempHome,
+        PARENT_ONLY: 'hidden',
+      },
+    );
     assert.equal(result.code, EXIT_CODES.SUCCESS);
     assert.equal(result.stdout, '');
   });
 
   void it('does include parent env vars when passthrough is true', async () => {
     await setupFixture();
-    const script = createRunUseScript(
+    const result = await runNode(
       [
         nodeExec,
         '-e',
         "process.stdout.write((process.env.PARENT_ONLY ?? '') + ':' + (process.env.FOO ?? ''))",
       ],
+      {
+        ...process.env,
+        HOME: tempHome,
+        USERPROFILE: tempHome,
+        PARENT_ONLY: 'seen',
+      },
       true,
     );
-
-    const result = await runNode(script, {
-      ...process.env,
-      HOME: tempHome,
-      USERPROFILE: tempHome,
-      PARENT_ONLY: 'seen',
-    });
     assert.equal(result.stdout, 'seen:bar');
   });
 
   void it('does let decrypted vars override parent vars in passthrough mode', async () => {
     await setupFixture();
-    const script = createRunUseScript(
+    const result = await runNode(
       [nodeExec, '-e', "process.stdout.write(process.env.FOO ?? '')"],
+      {
+        ...process.env,
+        HOME: tempHome,
+        USERPROFILE: tempHome,
+        FOO: 'parent',
+      },
       true,
     );
-
-    const result = await runNode(script, {
-      ...process.env,
-      HOME: tempHome,
-      USERPROFILE: tempHome,
-      FOO: 'parent',
-    });
     assert.equal(result.stdout, 'bar');
   });
 
   void it('does exit with child exit code', async () => {
     await setupFixture();
-    const script = createRunUseScript([nodeExec, '-e', 'process.exit(7)']);
-
-    const result = await runNode(script, { ...process.env, HOME: tempHome, USERPROFILE: tempHome });
+    const result = await runNode([nodeExec, '-e', 'process.exit(7)'], {
+      ...process.env,
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+    });
     assert.equal(result.code, 7);
   });
 
   void it('does exit with MISSING_CONFIG when config file is missing', async () => {
-    const script = createRunUseScript([nodeExec, '-e', 'process.exit(0)']);
-
-    const result = await runNode(script, { ...process.env, HOME: tempHome, USERPROFILE: tempHome });
+    const result = await runNode([nodeExec, '-e', 'process.exit(0)'], {
+      ...process.env,
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+    });
     assert.equal(result.code, EXIT_CODES.MISSING_CONFIG);
   });
 
@@ -194,8 +200,7 @@ void describe('commands/use', () => {
       throw configResult.error;
     }
 
-    const script = createRunUseScript([nodeExec, '-e', 'process.exit(0)']);
-    const result = await runNode(script, {
+    const result = await runNode([nodeExec, '-e', 'process.exit(0)'], {
       ...process.env,
       HOME: tempHome,
       USERPROFILE: tempHome,
@@ -217,16 +222,68 @@ void describe('commands/use', () => {
       throw saveKeyResult.error;
     }
 
-    const script = createRunUseScript([nodeExec, '-e', 'process.exit(0)']);
-    const result = await runNode(script, { ...process.env, HOME: tempHome, USERPROFILE: tempHome });
+    const result = await runNode([nodeExec, '-e', 'process.exit(0)'], {
+      ...process.env,
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+    });
+    assert.equal(result.code, EXIT_CODES.DECRYPTION_FAILED);
+  });
+
+  void it('does continue in non-strict mode when shared extends fails', async () => {
+    await setupFixture();
+    const adapter = createFilesystemAdapter(projectRoot);
+    const config: EnvltConfig = {
+      appName: 'envlt',
+      envs: ['test'],
+      keyId: 'main',
+      extends: ['github:missing/repo/path'],
+    };
+    const configResult = await writeConfig(config, projectRoot, adapter);
+    if (!configResult.ok) {
+      throw configResult.error;
+    }
+
+    const result = await runNode([nodeExec, '-e', "process.stdout.write(process.env.FOO ?? '')"], {
+      ...process.env,
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+    });
+    assert.equal(result.code, EXIT_CODES.SUCCESS);
+    assert.equal(result.stdout, 'bar');
+    assert.match(result.stderr, /Shared secrets unavailable/u);
+  });
+
+  void it('does fail in strict mode when shared extends fails', async () => {
+    await setupFixture();
+    const adapter = createFilesystemAdapter(projectRoot);
+    const config: EnvltConfig = {
+      appName: 'envlt',
+      envs: ['test'],
+      keyId: 'main',
+      extends: ['github:missing/repo/path'],
+    };
+    const configResult = await writeConfig(config, projectRoot, adapter);
+    if (!configResult.ok) {
+      throw configResult.error;
+    }
+
+    const result = await runNode(
+      [nodeExec, '-e', "process.stdout.write(process.env.FOO ?? '')"],
+      { ...process.env, HOME: tempHome, USERPROFILE: tempHome },
+      false,
+      true,
+    );
     assert.equal(result.code, EXIT_CODES.DECRYPTION_FAILED);
   });
 
   void it('does exit with CHILD_PROCESS_ERROR when command is not found', async () => {
     await setupFixture();
-    const script = createRunUseScript(['__missing_command__']);
-
-    const result = await runNode(script, { ...process.env, HOME: tempHome, USERPROFILE: tempHome });
+    const result = await runNode(['__missing_command__'], {
+      ...process.env,
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+    });
     assert.equal(result.code, EXIT_CODES.CHILD_PROCESS_ERROR);
   });
 });

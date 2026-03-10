@@ -84,6 +84,9 @@ void describe('hooks/install', () => {
   });
 
   void it('does return write error when gitdir target is read-only', async () => {
+    if (typeof process.getuid === 'function' && process.getuid() === 0) {
+      return;
+    }
     const readonlyGitRoot = path.join(projectRoot, 'readonly-git');
     const readonlyHooks = path.join(readonlyGitRoot, 'hooks');
     await fs.mkdir(readonlyHooks, { recursive: true });
