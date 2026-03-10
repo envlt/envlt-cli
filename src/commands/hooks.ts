@@ -1,12 +1,21 @@
+import { installPreCommitHook, isHookInstalled, uninstallPreCommitHook } from '../hooks/install.js';
 import { logger } from '../logger.js';
 import { err, ok, type Result } from '../result.js';
 
-import { installPreCommitHook, isHookInstalled, uninstallPreCommitHook } from '../hooks/install.js';
+export type HooksInstallOptions = {
+  readonly force?: boolean;
+  readonly projectRoot: string;
+};
 
-export async function runHooksInstall(options: {
-  force?: boolean;
-  projectRoot: string;
-}): Promise<Result<void>> {
+export type HooksUninstallOptions = {
+  readonly projectRoot: string;
+};
+
+export type HooksStatusOptions = {
+  readonly projectRoot: string;
+};
+
+export async function runHooksInstall(options: HooksInstallOptions): Promise<Result<void>> {
   const result = await installPreCommitHook({
     projectRoot: options.projectRoot,
     ...(options.force !== undefined ? { force: options.force } : {}),
@@ -34,7 +43,7 @@ export async function runHooksInstall(options: {
   return ok(undefined);
 }
 
-export async function runHooksUninstall(options: { projectRoot: string }): Promise<Result<void>> {
+export async function runHooksUninstall(options: HooksUninstallOptions): Promise<Result<void>> {
   const uninstallResult = await uninstallPreCommitHook(options.projectRoot);
   if (!uninstallResult.ok) {
     return err(uninstallResult.error);
@@ -44,7 +53,7 @@ export async function runHooksUninstall(options: { projectRoot: string }): Promi
   return ok(undefined);
 }
 
-export async function runHooksStatus(options: { projectRoot: string }): Promise<Result<void>> {
+export async function runHooksStatus(options: HooksStatusOptions): Promise<Result<void>> {
   const installed = await isHookInstalled(options.projectRoot);
   if (installed) {
     logger.info('Pre-commit hook is installed.');

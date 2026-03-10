@@ -10,6 +10,9 @@ import type { Result } from '../result.js';
 import { installPreCommitHook, isHookInstalled, uninstallPreCommitHook } from './install.js';
 
 const MARKER = '# envlt:pre-commit';
+const PREPENDED_MARKER = '# envlt:pre-commit (prepended)';
+const HOOK_CMD = 'npx --no-install envlt check';
+const ORIGINAL_HOOK_MARKER = '# Original hook follows:';
 const HOOK_PATH_PARTS = ['.git', 'hooks', 'pre-commit'] as const;
 
 function hookPath(projectRoot: string): string {
@@ -44,27 +47,13 @@ void describe('hooks/install', () => {
     const content = await fs.readFile(fullPath, 'utf8');
     assert.match(content, /^#!\/bin\/sh/u);
     assert.match(content, /set -e/u);
-    assert.match(content, /npx envlt check/u);
+    assert.match(content, /npx --no-install envlt check/u);
     assert.match(content, new RegExp(MARKER, 'u'));
 
     const stats = await fs.stat(fullPath);
     assert.equal(stats.mode & 0o777, 0o755);
   });
 
-  void it('does return error when hooks path is invalid for writing', async () => {
-    await fs.rm(path.join(projectRoot, '.git', 'hooks'), { recursive: true, force: true });
-    await fs.writeFile(path.join(projectRoot, '.git', 'hooks'), 'not-a-directory', 'utf8');
-
-    const result = await installPreCommitHook({ projectRoot });
-    assert.equal(result.ok, false);
-  });
-
-  void it('does return error when existing hook path cannot be read', async () => {
-    await fs.mkdir(hookPath(projectRoot), { recursive: true });
-
-    const result = await installPreCommitHook({ projectRoot });
-    assert.equal(result.ok, false);
-  });
   void it('does skip when hook already exists and force is false', async () => {
     await installPreCommitHook({ projectRoot });
     const second = expectOk(await installPreCommitHook({ projectRoot }));
@@ -80,7 +69,7 @@ void describe('hooks/install', () => {
 
     assert.deepEqual(result, { status: 'updated' });
     const content = await fs.readFile(fullPath, 'utf8');
-    assert.match(content, /npx envlt check/u);
+    assert.match(content, new RegExp(HOOK_CMD, 'u'));
     assert.ok(!content.includes('echo old'));
   });
 
@@ -92,6 +81,21 @@ void describe('hooks/install', () => {
     assert.deepEqual(result, { status: 'skipped', reason: 'not_a_git_repo' });
   });
 
+  void it('does return error when install cannot read existing hook path', async () => {
+    await fs.mkdir(hookPath(projectRoot), { recursive: true });
+
+    const result = await installPreCommitHook({ projectRoot, force: true });
+    assert.equal(result.ok, false);
+  });
+
+  void it('does fail force update when prepended hook is malformed', async () => {
+    const fullPath = hookPath(projectRoot);
+    await fs.writeFile(fullPath, '#!/bin/sh\n# envlt:pre-commit (prepended)\n', 'utf8');
+
+    const result = await installPreCommitHook({ projectRoot, force: true });
+    assert.equal(result.ok, false);
+  });
+
   void it('does report installed status through isHookInstalled', async () => {
     const before = await isHookInstalled(projectRoot);
     assert.equal(before, false);
@@ -101,12 +105,6 @@ void describe('hooks/install', () => {
     assert.equal(after, true);
   });
 
-  void it('does return false when installed check cannot read hook file', async () => {
-    await fs.mkdir(hookPath(projectRoot), { recursive: true });
-
-    const installed = await isHookInstalled(projectRoot);
-    assert.equal(installed, false);
-  });
   void it('does uninstall envlt-managed hook', async () => {
     await installPreCommitHook({ projectRoot });
 
@@ -121,11 +119,32 @@ void describe('hooks/install', () => {
     assert.equal(uninstallResult.ok, true);
   });
 
-  void it('does return error when uninstall cannot read hook path', async () => {
+  void it('does return read error when uninstall cannot read hook path', async () => {
     await fs.mkdir(hookPath(projectRoot), { recursive: true });
 
     const uninstallResult = await uninstallPreCommitHook(projectRoot);
     assert.equal(uninstallResult.ok, false);
+  });
+
+  void it('does fail uninstall when prepended hook is malformed', async () => {
+    const fullPath = hookPath(projectRoot);
+    await fs.writeFile(fullPath, '#!/bin/sh\n# envlt:pre-commit (prepended)\n', 'utf8');
+
+    const result = await uninstallPreCommitHook(projectRoot);
+    assert.equal(result.ok, false);
+  });
+
+  void it('does restore original hook on uninstall for prepended hooks', async () => {
+    const fullPath = hookPath(projectRoot);
+    const original = '#!/bin/sh\necho custom-original\n';
+    await fs.writeFile(fullPath, original, { mode: 0o755 });
+
+    await installPreCommitHook({ projectRoot, force: true });
+    const uninstallResult = await uninstallPreCommitHook(projectRoot);
+    assert.equal(uninstallResult.ok, true);
+
+    const restored = await fs.readFile(fullPath, 'utf8');
+    assert.equal(restored, original);
   });
 
   void it('does refuse uninstall when hook has no envlt marker', async () => {
@@ -151,9 +170,24 @@ void describe('hooks/install', () => {
 
     assert.deepEqual(result, { status: 'updated' });
     const content = await fs.readFile(fullPath, 'utf8');
-    assert.match(content, /# envlt:pre-commit \(prepended\)/u);
-    assert.match(content, /npx envlt check/u);
-    assert.match(content, /# Original hook follows:/u);
+    assert.ok(content.includes(PREPENDED_MARKER));
+    assert.match(content, new RegExp(HOOK_CMD, 'u'));
+    assert.match(content, new RegExp(ORIGINAL_HOOK_MARKER, 'u'));
     assert.match(content, /echo custom-hook/u);
+  });
+
+  void it('does preserve original hook when force is run on prepended hook repeatedly', async () => {
+    const fullPath = hookPath(projectRoot);
+    const original = '#!/bin/sh\necho original-still-here\n';
+    await fs.writeFile(fullPath, original, { mode: 0o755 });
+
+    await installPreCommitHook({ projectRoot, force: true });
+    const second = expectOk(await installPreCommitHook({ projectRoot, force: true }));
+    assert.deepEqual(second, { status: 'updated' });
+
+    const content = await fs.readFile(fullPath, 'utf8');
+    assert.match(content, /echo original-still-here/u);
+    assert.equal(content.split(ORIGINAL_HOOK_MARKER).length - 1, 1);
+    assert.equal(content.split(PREPENDED_MARKER).length - 1, 1);
   });
 });

@@ -26,7 +26,6 @@ afterEach(async () => {
 void describe('ci/github-actions', () => {
   void it('does generate workflow content with expected core actions and secret', () => {
     const content = generateWorkflowContent({
-      appName: 'demo-app',
       envs: ['staging', 'production'],
     });
 
@@ -38,7 +37,7 @@ void describe('ci/github-actions', () => {
 
   void it('does generate one check step per env', () => {
     const envs = ['development', 'staging', 'production'];
-    const content = generateWorkflowContent({ appName: 'demo-app', envs });
+    const content = generateWorkflowContent({ envs });
 
     const stepCount = (content.match(/Check environment variables \(/gu) ?? []).length;
     assert.equal(stepCount, envs.length);
@@ -46,7 +45,6 @@ void describe('ci/github-actions', () => {
 
   void it('does include provided node version', () => {
     const content = generateWorkflowContent({
-      appName: 'demo-app',
       envs: ['staging'],
       nodeVersion: '18',
     });
@@ -76,7 +74,6 @@ void describe('ci/github-actions', () => {
   void it('does allow overriding workflow name and node version when writing file', async () => {
     const adapter = createFilesystemAdapter(projectRoot);
     const result = await generateGithubActionsWorkflow(['preview'], projectRoot, adapter, {
-      appName: 'custom-app',
       workflowName: 'custom-workflow',
       nodeVersion: '18',
     });

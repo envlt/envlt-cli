@@ -4,10 +4,10 @@ import * as path from 'node:path';
 import { AppError, ErrorCode } from '../errors.js';
 import { err, ok, type Result } from '../result.js';
 
-export interface HookInstallOptions {
+export type HookInstallOptions = {
   readonly projectRoot: string;
   readonly force?: boolean;
-}
+};
 
 export type HookInstallResult =
   | { readonly status: 'installed' }
@@ -17,13 +17,15 @@ export type HookInstallResult =
 const HOOK_MODE = 0o755;
 const HOOK_MARKER = '# envlt:pre-commit';
 const PREPENDED_MARKER = '# envlt:pre-commit (prepended)';
+const ORIGINAL_HOOK_MARKER = '# Original hook follows:';
 const HOOK_RELATIVE_PATH = path.join('.git', 'hooks', 'pre-commit');
 const HOOK_HEADER = '#!/bin/sh';
+const HOOK_COMMAND = 'npx --no-install envlt check';
 const HOOK_BODY_LINES = [
   HOOK_MARKER,
   '# This hook was installed by envlt. To uninstall: envlt hooks uninstall',
   'set -e',
-  'npx envlt check',
+  HOOK_COMMAND,
 ] as const;
 
 function hookPath(projectRoot: string): string {
@@ -39,15 +41,40 @@ function managedHookContent(): string {
 }
 
 function prependedHookContent(originalContent: string): string {
-  return `${HOOK_HEADER}\n${PREPENDED_MARKER}\nnpx envlt check\n\n# Original hook follows:\n${originalContent}`;
+  return [
+    HOOK_HEADER,
+    PREPENDED_MARKER,
+    HOOK_COMMAND,
+    '',
+    ORIGINAL_HOOK_MARKER,
+    originalContent,
+  ].join('\n');
+}
+
+function extractOriginalFromPrepended(content: string): Result<string> {
+  const markerIndex = content.indexOf(`${ORIGINAL_HOOK_MARKER}\n`);
+  if (markerIndex < 0) {
+    return err(
+      new AppError(
+        ErrorCode.STORAGE_READ_ERROR,
+        'Invalid envlt prepended hook format. Could not locate preserved original hook.',
+      ),
+    );
+  }
+
+  return ok(content.slice(markerIndex + `${ORIGINAL_HOOK_MARKER}\n`.length));
 }
 
 function isMissing(cause: unknown): boolean {
   return cause instanceof Error && 'code' in cause && cause.code === 'ENOENT';
 }
 
-function hasEnvltMarker(content: string): boolean {
-  return content.includes(HOOK_MARKER) || content.includes(PREPENDED_MARKER);
+function isPrependedHook(content: string): boolean {
+  return content.includes(PREPENDED_MARKER);
+}
+
+function isManagedHook(content: string): boolean {
+  return content.includes(HOOK_MARKER);
 }
 
 async function writeHook(filePath: string, content: string): Promise<Result<void>> {
@@ -76,6 +103,23 @@ async function readHookIfExists(filePath: string): Promise<Result<string | undef
       new AppError(ErrorCode.STORAGE_READ_ERROR, 'Failed to read pre-commit hook.', error),
     );
   }
+}
+
+function withUpdateContent(existing: string): Result<string> {
+  if (!isManagedHook(existing)) {
+    return ok(prependedHookContent(existing));
+  }
+
+  if (!isPrependedHook(existing)) {
+    return ok(managedHookContent());
+  }
+
+  const originalResult = extractOriginalFromPrepended(existing);
+  if (!originalResult.ok) {
+    return err(originalResult.error);
+  }
+
+  return ok(prependedHookContent(originalResult.value));
 }
 
 export async function installPreCommitHook(
@@ -113,10 +157,12 @@ export async function installPreCommitHook(
     return ok({ status: 'skipped', reason: 'already_exists' });
   }
 
-  const nextContent = hasEnvltMarker(existing.value)
-    ? managedHookContent()
-    : prependedHookContent(existing.value);
-  const writeResult = await writeHook(preCommitPath, nextContent);
+  const nextContent = withUpdateContent(existing.value);
+  if (!nextContent.ok) {
+    return err(nextContent.error);
+  }
+
+  const writeResult = await writeHook(preCommitPath, nextContent.value);
   if (!writeResult.ok) {
     return err(writeResult.error);
   }
@@ -130,7 +176,7 @@ export async function isHookInstalled(projectRoot: string): Promise<boolean> {
     return false;
   }
 
-  return hasEnvltMarker(contentResult.value);
+  return isManagedHook(contentResult.value);
 }
 
 export async function uninstallPreCommitHook(projectRoot: string): Promise<Result<void>> {
@@ -144,13 +190,22 @@ export async function uninstallPreCommitHook(projectRoot: string): Promise<Resul
     return ok(undefined);
   }
 
-  if (!hasEnvltMarker(contentResult.value)) {
+  if (!isManagedHook(contentResult.value)) {
     return err(
       new AppError(
         ErrorCode.STORAGE_DELETE_ERROR,
         'Refusing to remove pre-commit hook not installed by envlt.',
       ),
     );
+  }
+
+  if (isPrependedHook(contentResult.value)) {
+    const originalResult = extractOriginalFromPrepended(contentResult.value);
+    if (!originalResult.ok) {
+      return err(originalResult.error);
+    }
+
+    return writeHook(preCommitPath, originalResult.value);
   }
 
   try {
