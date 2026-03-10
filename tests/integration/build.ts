@@ -5,8 +5,8 @@ import * as path from 'node:path';
 
 const REPO_ROOT = path.resolve('.');
 const BUILD_LOCK_DIR = path.join(os.tmpdir(), 'envlt-integration-build.lock');
-const BUILD_DONE_FILE = path.join(os.tmpdir(), 'envlt-integration-build.done');
 const DIST_BIN_PATH = path.join(REPO_ROOT, 'dist', 'bin', 'envlt.js');
+const SOURCE_DIRS = [path.join(REPO_ROOT, 'bin'), path.join(REPO_ROOT, 'src')] as const;
 const LOCK_RETRY_MS = 50;
 
 let isBuiltInProcess = false;
@@ -45,11 +45,57 @@ async function runBuild(): Promise<void> {
   });
 }
 
+async function collectLatestMtimeMs(dirPath: string): Promise<number> {
+  let latestMtimeMs = 0;
+  const entries = await fs.readdir(dirPath, { withFileTypes: true });
+
+  await Promise.all(
+    entries.map(async (entry) => {
+      const fullPath = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        const childLatest = await collectLatestMtimeMs(fullPath);
+        if (childLatest > latestMtimeMs) {
+          latestMtimeMs = childLatest;
+        }
+        return;
+      }
+
+      if (!entry.isFile()) {
+        return;
+      }
+
+      const stat = await fs.stat(fullPath);
+      if (stat.mtimeMs > latestMtimeMs) {
+        latestMtimeMs = stat.mtimeMs;
+      }
+    }),
+  );
+
+  return latestMtimeMs;
+}
+
+async function latestSourceMtimeMs(): Promise<number> {
+  let latest = 0;
+
+  await Promise.all(
+    SOURCE_DIRS.map(async (dirPath) => {
+      const dirLatest = await collectLatestMtimeMs(dirPath);
+      if (dirLatest > latest) {
+        latest = dirLatest;
+      }
+    }),
+  );
+
+  return latest;
+}
+
 async function hasUsableBuild(): Promise<boolean> {
   try {
-    await fs.access(BUILD_DONE_FILE);
-    await fs.access(DIST_BIN_PATH);
-    return true;
+    const [distStat, latestSourceMtime] = await Promise.all([
+      fs.stat(DIST_BIN_PATH),
+      latestSourceMtimeMs(),
+    ]);
+    return distStat.mtimeMs >= latestSourceMtime;
   } catch {
     return false;
   }
@@ -86,7 +132,6 @@ export async function ensureIntegrationBuild(): Promise<void> {
 
   try {
     await runBuild();
-    await fs.writeFile(BUILD_DONE_FILE, 'ok\n', 'utf8');
     isBuiltInProcess = true;
   } finally {
     await fs.rm(BUILD_LOCK_DIR, { recursive: true, force: true });

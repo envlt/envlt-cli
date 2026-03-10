@@ -84,11 +84,20 @@ void describe('hooks/install', () => {
   });
 
   void it('does return write error when gitdir target is read-only', async () => {
-    await fs.rm(path.join(projectRoot, '.git'), { recursive: true, force: true });
-    await fs.writeFile(path.join(projectRoot, '.git'), 'gitdir: /sys\n', 'utf8');
+    const readonlyGitRoot = path.join(projectRoot, 'readonly-git');
+    const readonlyHooks = path.join(readonlyGitRoot, 'hooks');
+    await fs.mkdir(readonlyHooks, { recursive: true });
+    await fs.chmod(readonlyHooks, 0o500);
 
-    const result = await installPreCommitHook({ projectRoot });
-    assert.equal(result.ok, false);
+    await fs.rm(path.join(projectRoot, '.git'), { recursive: true, force: true });
+    await fs.writeFile(path.join(projectRoot, '.git'), `gitdir: ${readonlyGitRoot}\n`, 'utf8');
+
+    try {
+      const result = await installPreCommitHook({ projectRoot });
+      assert.equal(result.ok, false);
+    } finally {
+      await fs.chmod(readonlyHooks, 0o700);
+    }
   });
 
   void it('does fail when .git pointer file is malformed', async () => {
