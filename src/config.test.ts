@@ -67,24 +67,48 @@ void describe('config', () => {
     assert.equal(expectErrCode(result), ErrorCode.CONFIG_INVALID);
   });
 
-  void it('does return CONFIG_INVALID from validateConfig for invalid optional fields', () => {
-    const result = validateConfig({
+  void it('does return CONFIG_INVALID from validateConfig for invalid requiredPairs', () => {
+    const wrongTupleLength = validateConfig({
       appName: 'app',
       envs: ['staging'],
       keyId: 'main',
       requiredPairs: [['ONLY_ONE']],
     });
-    assert.equal(expectErrCode(result), ErrorCode.CONFIG_INVALID);
+    assert.equal(expectErrCode(wrongTupleLength), ErrorCode.CONFIG_INVALID);
+
+    const wrongKeyFormat = validateConfig({
+      appName: 'app',
+      envs: ['staging'],
+      keyId: 'main',
+      requiredPairs: [['STRIPE_SECRET_KEY', 'stripe_public_key']],
+    });
+    assert.equal(expectErrCode(wrongKeyFormat), ErrorCode.CONFIG_INVALID);
   });
 
   void it('does return CONFIG_INVALID from validateConfig for invalid customDictionary', () => {
-    const result = validateConfig({
+    const nonStringEntry = validateConfig({
       appName: 'app',
       envs: ['staging'],
       keyId: 'main',
       customDictionary: ['GOOD', 42],
     });
-    assert.equal(expectErrCode(result), ErrorCode.CONFIG_INVALID);
+    assert.equal(expectErrCode(nonStringEntry), ErrorCode.CONFIG_INVALID);
+
+    const invalidKeyFormat = validateConfig({
+      appName: 'app',
+      envs: ['staging'],
+      keyId: 'main',
+      customDictionary: ['GOOD_KEY', 'bad_key'],
+    });
+    assert.equal(expectErrCode(invalidKeyFormat), ErrorCode.CONFIG_INVALID);
+
+    const emptyEntry = validateConfig({
+      appName: 'app',
+      envs: ['staging'],
+      keyId: 'main',
+      customDictionary: ['GOOD_KEY', ''],
+    });
+    assert.equal(expectErrCode(emptyEntry), ErrorCode.CONFIG_INVALID);
   });
 
   void it('does return STORAGE_READ_ERROR when adapter exists throws', async () => {
