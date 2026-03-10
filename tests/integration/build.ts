@@ -6,6 +6,7 @@ import * as path from 'node:path';
 const REPO_ROOT = path.resolve('.');
 const BUILD_LOCK_DIR = path.join(os.tmpdir(), 'envlt-integration-build.lock');
 const BUILD_DONE_FILE = path.join(os.tmpdir(), 'envlt-integration-build.done');
+const DIST_BIN_PATH = path.join(REPO_ROOT, 'dist', 'bin', 'envlt.js');
 const LOCK_RETRY_MS = 50;
 
 let isBuiltInProcess = false;
@@ -44,17 +45,24 @@ async function runBuild(): Promise<void> {
   });
 }
 
+async function hasUsableBuild(): Promise<boolean> {
+  try {
+    await fs.access(BUILD_DONE_FILE);
+    await fs.access(DIST_BIN_PATH);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function ensureIntegrationBuild(): Promise<void> {
   if (isBuiltInProcess) {
     return;
   }
 
-  try {
-    await fs.access(BUILD_DONE_FILE);
+  if (await hasUsableBuild()) {
     isBuiltInProcess = true;
     return;
-  } catch {
-    // no-op
   }
 
   for (;;) {
@@ -63,14 +71,13 @@ export async function ensureIntegrationBuild(): Promise<void> {
       break;
     } catch (error: unknown) {
       if (error instanceof Error && 'code' in error && error.code === 'EEXIST') {
-        try {
-          await fs.access(BUILD_DONE_FILE);
+        if (await hasUsableBuild()) {
           isBuiltInProcess = true;
           return;
-        } catch {
-          await wait(LOCK_RETRY_MS);
-          continue;
         }
+
+        await wait(LOCK_RETRY_MS);
+        continue;
       }
 
       throw error;
