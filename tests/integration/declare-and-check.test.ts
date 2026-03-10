@@ -8,26 +8,12 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 
 import { EXIT_CODES } from '../../src/constants.js';
 
+import { ensureIntegrationBuild } from './build.js';
+
 const DIST_BIN_PATH = path.resolve('dist/bin/envlt.js');
-const REPO_ROOT = path.resolve('.');
 
 let projectRoot = '';
 let tempHome = '';
-let isBuilt = false;
-
-async function runBuild(): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn('npm', ['run', 'build'], { cwd: REPO_ROOT, stdio: 'inherit' });
-    child.on('close', (code: number | null) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-
-      reject(new Error(`Build failed with exit code ${String(code)}`));
-    });
-  });
-}
 
 async function runCli(
   args: readonly string[],
@@ -48,10 +34,7 @@ async function runCli(
 }
 
 beforeEach(async () => {
-  if (!isBuilt) {
-    await runBuild();
-    isBuilt = true;
-  }
+  await ensureIntegrationBuild();
 
   projectRoot = path.join(os.tmpdir(), randomUUID());
   tempHome = path.join(os.tmpdir(), randomUUID());
@@ -100,12 +83,12 @@ void describe('integration/declare-and-check', () => {
     assert.equal(checkMissing.code, EXIT_CODES.CHECK_FAILED);
 
     const setResult = await runCli(
-      ['set', 'DATABASE_URL=postgres://localhost/db', '--env', 'staging'],
+      ['set', 'DATABASE_URL=postgres://db', '--env', 'staging'],
       baseEnv,
     );
     assert.equal(setResult.code, 0);
 
     const checkOk = await runCli(['check', '--env', 'staging'], baseEnv);
-    assert.equal(checkOk.code, 0);
+    assert.equal(checkOk.code, EXIT_CODES.SUCCESS);
   });
 });

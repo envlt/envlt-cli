@@ -6,26 +6,12 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 
+import { ensureIntegrationBuild } from './build.js';
+
 const DIST_BIN_PATH = path.resolve('dist/bin/envlt.js');
-const REPO_ROOT = path.resolve('.');
 
 let projectRoot = '';
 let tempHome = '';
-let isBuilt = false;
-
-async function runBuild(): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn('npm', ['run', 'build'], { cwd: REPO_ROOT, stdio: 'inherit' });
-    child.on('close', (code: number | null) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-
-      reject(new Error(`Build failed with exit code ${String(code)}`));
-    });
-  });
-}
 
 async function runCli(
   args: readonly string[],
@@ -51,10 +37,7 @@ async function runCli(
 }
 
 beforeEach(async () => {
-  if (!isBuilt) {
-    await runBuild();
-    isBuilt = true;
-  }
+  await ensureIntegrationBuild();
 
   projectRoot = path.join(os.tmpdir(), randomUUID());
   tempHome = path.join(os.tmpdir(), randomUUID());
@@ -122,6 +105,6 @@ void describe('integration/set-and-use', () => {
 
     const setResult = await runCli(['set', 'invalid_key=value', '--env', 'test'], baseEnv);
     assert.notEqual(setResult.code, 0);
-    assert.match(setResult.stderr, /Expected UPPER_SNAKE_CASE format/);
+    assert.match(setResult.stderr, /Expected UPPER_SNAKE_CASE format/u);
   });
 });

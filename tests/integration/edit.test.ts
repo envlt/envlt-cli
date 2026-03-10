@@ -6,32 +6,19 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 
+import { ensureIntegrationBuild } from './build.js';
+
 const DIST_BIN_PATH = path.resolve('dist/bin/envlt.js');
-const REPO_ROOT = path.resolve('.');
 
 let projectRoot = '';
 let tempHome = '';
-let isBuilt = false;
 
 function quoteEditorArg(value: string): string {
   return `"${value.replace(/\\/gu, '\\\\').replace(/"/gu, '\\"')}"`;
 }
+
 function buildEditorCommand(scriptPath: string): string {
   return `${quoteEditorArg(process.execPath)} ${quoteEditorArg(scriptPath)}`;
-}
-
-async function runBuild(): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn('npm', ['run', 'build'], { cwd: REPO_ROOT, stdio: 'inherit' });
-    child.on('close', (code: number | null) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-
-      reject(new Error(`Build failed with exit code ${String(code)}`));
-    });
-  });
 }
 
 async function runCli(
@@ -58,10 +45,7 @@ async function runCli(
 }
 
 beforeEach(async () => {
-  if (!isBuilt) {
-    await runBuild();
-    isBuilt = true;
-  }
+  await ensureIntegrationBuild();
 
   projectRoot = path.join(os.tmpdir(), randomUUID());
   tempHome = path.join(os.tmpdir(), randomUUID());
@@ -90,15 +74,24 @@ afterEach(async () => {
 
 void describe('integration/edit', () => {
   void it('does edit env and leave no temp edit files behind', async () => {
-    const editorPath = buildEditorCommand(path.resolve('tests/fixtures/fake-editor-ok.js'));
-    const capturedTmpPathFile = path.join(projectRoot, 'captured-temp-path.txt');
+    const editorScriptPath = path.join(projectRoot, 'editor-script.js');
+    const capturedTmpPathFile = path.join(projectRoot, 'captured-tmp-path.txt');
+    const editorScript = [
+      "import * as fs from 'node:fs';",
+      'const target = process.argv[2];',
+      "const capturePath = process.env['ENVLT_CAPTURE_TMP_PATH'];",
+      "if (capturePath !== undefined) fs.writeFileSync(capturePath, target, 'utf8');",
+      "fs.writeFileSync(target, 'FOO=edited\\n', 'utf8');",
+    ].join('\n');
+    await fs.writeFile(editorScriptPath, editorScript, 'utf8');
+
+    const editorCommand = buildEditorCommand(editorScriptPath);
     const baseEnv = {
       ...process.env,
       HOME: tempHome,
       USERPROFILE: tempHome,
-      EDITOR: editorPath,
+      EDITOR: editorCommand,
       ENVLT_CAPTURE_TMP_PATH: capturedTmpPathFile,
-      ENVLT_NODE: process.execPath,
     };
 
     const setResult = await runCli(['set', 'FOO=original', '--env', 'test'], baseEnv);
