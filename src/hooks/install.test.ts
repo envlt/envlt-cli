@@ -67,6 +67,14 @@ void describe('hooks/install', () => {
     assert.match(content, /envlt check/u);
   });
 
+  void it('does skip gitdir pointer when target directory does not exist', async () => {
+    await fs.rm(path.join(projectRoot, '.git'), { recursive: true, force: true });
+    await fs.writeFile(path.join(projectRoot, '.git'), 'gitdir: missing-gitdir\n', 'utf8');
+
+    const result = expectOk(await installPreCommitHook({ projectRoot }));
+    assert.deepEqual(result, { status: 'skipped', reason: 'not_a_git_repo' });
+  });
+
   void it('does fail when .git pointer file is malformed', async () => {
     await fs.rm(path.join(projectRoot, '.git'), { recursive: true, force: true });
     await fs.writeFile(path.join(projectRoot, '.git'), 'invalid-git-pointer\n', 'utf8');
@@ -198,6 +206,19 @@ void describe('hooks/install', () => {
     assert.equal(restored, original);
   });
 
+  void it('does preserve original hook mode when uninstalling prepended hook', async () => {
+    const fullPath = hookPath(projectRoot);
+    const original = '#!/usr/bin/env bash\necho restricted\n';
+    await fs.writeFile(fullPath, original, { mode: 0o700 });
+
+    await installPreCommitHook({ projectRoot, force: true });
+    const uninstallResult = await uninstallPreCommitHook(projectRoot);
+    assert.equal(uninstallResult.ok, true);
+
+    const restoredStat = await fs.stat(fullPath);
+    assert.equal(restoredStat.mode & 0o777, 0o700);
+  });
+
   void it('does refuse uninstall when hook has no envlt marker', async () => {
     const fullPath = hookPath(projectRoot);
     await fs.writeFile(fullPath, '#!/bin/sh\necho custom\n', { mode: 0o755 });
@@ -225,9 +246,10 @@ void describe('hooks/install', () => {
     assert.match(content, /set -e/u);
     assert.match(content, new RegExp(HOOK_CMD, 'u'));
     assert.match(content, /mktemp/u);
-    assert.match(content, /ENVLT_ORIGINAL_HOOK/u);
+    assert.match(content, /__ENVLT_ORIGINAL_HOOK_B64=/u);
     assert.match(content, /\[\[ 2 -gt 1 \]\]/u);
     assert.match(content, new RegExp(ORIGINAL_HOOK_MARKER, 'u'));
+    assert.ok(!content.includes("<<'ENVLT_ORIGINAL_HOOK'"));
   });
 
   void it('does preserve original hook when force is run on prepended hook repeatedly', async () => {

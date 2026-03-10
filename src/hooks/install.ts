@@ -18,11 +18,13 @@ const HOOK_MODE = 0o755;
 const HOOK_MARKER = '# envlt:pre-commit';
 const PREPENDED_MARKER = '# envlt:pre-commit (prepended)';
 const ORIGINAL_HOOK_MARKER = '# Original hook follows:';
+const ORIGINAL_MODE_MARKER = '# Original hook mode:';
 const HOOK_HEADER = '#!/bin/sh';
 const HOOK_COMMAND = 'npx --no-install envlt check';
 const GITDIR_PREFIX = 'gitdir:';
 const PREPENDED_TMP_FILE = '.envlt-pre-commit.original.tmp';
 const HOOK_FILE_NAME = 'pre-commit';
+const PREPENDED_B64_PREFIX = '__ENVLT_ORIGINAL_HOOK_B64=';
 const HOOK_BODY_LINES = [
   HOOK_MARKER,
   '# This hook was installed by envlt. To uninstall: envlt hooks uninstall',
@@ -30,30 +32,45 @@ const HOOK_BODY_LINES = [
   HOOK_COMMAND,
 ] as const;
 
+type HookReadResult = {
+  readonly content: string;
+  readonly mode: number;
+};
+
+type PreservedOriginalHook = {
+  readonly content: string;
+  readonly mode?: number;
+};
+
 function managedHookContent(): string {
   return `${HOOK_HEADER}\n${HOOK_BODY_LINES.join('\n')}\n`;
 }
 
-function prependedHookContent(originalContent: string): string {
+function encodeBase64(value: string): string {
+  return Buffer.from(value, 'utf8').toString('base64');
+}
+
+function prependedHookContent(original: PreservedOriginalHook): string {
+  const originalMode = original.mode?.toString(8);
   return [
     HOOK_HEADER,
     PREPENDED_MARKER,
     'set -e',
     HOOK_COMMAND,
+    `${PREPENDED_B64_PREFIX}'${encodeBase64(original.content)}'`,
     `__ENVLT_ORIGINAL_HOOK="$(mktemp "${PREPENDED_TMP_FILE}.XXXXXX")"`,
-    'cat > "$__ENVLT_ORIGINAL_HOOK" <<\'ENVLT_ORIGINAL_HOOK\'',
-    originalContent,
-    'ENVLT_ORIGINAL_HOOK',
+    'printf "%s" "$__ENVLT_ORIGINAL_HOOK_B64" | base64 -d > "$__ENVLT_ORIGINAL_HOOK"',
     'chmod 755 "$__ENVLT_ORIGINAL_HOOK"',
     '"$__ENVLT_ORIGINAL_HOOK"',
     'rm -f "$__ENVLT_ORIGINAL_HOOK"',
     '',
+    ...(originalMode !== undefined ? [`${ORIGINAL_MODE_MARKER} ${originalMode}`] : []),
     ORIGINAL_HOOK_MARKER,
-    originalContent,
+    original.content,
   ].join('\n');
 }
 
-function extractOriginalFromPrepended(content: string): Result<string> {
+function extractOriginalFromPrepended(content: string): Result<PreservedOriginalHook> {
   const markerIndex = content.indexOf(`${ORIGINAL_HOOK_MARKER}\n`);
   if (markerIndex < 0) {
     return err(
@@ -64,7 +81,19 @@ function extractOriginalFromPrepended(content: string): Result<string> {
     );
   }
 
-  return ok(content.slice(markerIndex + `${ORIGINAL_HOOK_MARKER}\n`.length));
+  const modeLine = content
+    .split(/\r?\n/u)
+    .find((line) => line.startsWith(`${ORIGINAL_MODE_MARKER} `));
+  const parsedMode = modeLine?.slice(`${ORIGINAL_MODE_MARKER} `.length).trim();
+  const mode =
+    parsedMode !== undefined && /^[0-7]{3,4}$/u.test(parsedMode)
+      ? Number.parseInt(parsedMode, 8)
+      : undefined;
+
+  return ok({
+    content: content.slice(markerIndex + `${ORIGINAL_HOOK_MARKER}\n`.length),
+    ...(mode !== undefined ? { mode } : {}),
+  });
 }
 
 function isMissing(cause: unknown): boolean {
@@ -79,11 +108,15 @@ function isManagedHook(content: string): boolean {
   return content.includes(HOOK_MARKER);
 }
 
-async function writeHook(filePath: string, content: string): Promise<Result<void>> {
+async function writeHook(
+  filePath: string,
+  content: string,
+  mode: number = HOOK_MODE,
+): Promise<Result<void>> {
   try {
     await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, content, { mode: HOOK_MODE });
-    await fs.chmod(filePath, HOOK_MODE);
+    await fs.writeFile(filePath, content, { mode });
+    await fs.chmod(filePath, mode);
     return ok(undefined);
   } catch (error: unknown) {
     return err(
@@ -92,10 +125,10 @@ async function writeHook(filePath: string, content: string): Promise<Result<void
   }
 }
 
-async function readHookIfExists(filePath: string): Promise<Result<string | undefined>> {
+async function readHookIfExists(filePath: string): Promise<Result<HookReadResult | undefined>> {
   try {
-    const content = await fs.readFile(filePath, 'utf8');
-    return ok(content);
+    const [content, stat] = await Promise.all([fs.readFile(filePath, 'utf8'), fs.stat(filePath)]);
+    return ok({ content, mode: stat.mode & 0o777 });
   } catch (error: unknown) {
     if (isMissing(error)) {
       return ok(undefined);
@@ -130,7 +163,20 @@ async function resolveGitDirectory(projectRoot: string): Promise<Result<string |
       return err(new AppError(ErrorCode.STORAGE_READ_ERROR, 'Invalid .git file format.'));
     }
 
-    return ok(path.resolve(projectRoot, rawPath));
+    const resolvedGitDirectory = path.resolve(projectRoot, rawPath);
+    const gitDirectoryStat = await fs.stat(resolvedGitDirectory).catch((error: unknown) => {
+      if (isMissing(error)) {
+        return undefined;
+      }
+
+      throw error;
+    });
+
+    if (gitDirectoryStat === undefined || !gitDirectoryStat.isDirectory()) {
+      return ok(undefined);
+    }
+
+    return ok(resolvedGitDirectory);
   } catch (error: unknown) {
     if (isMissing(error)) {
       return ok(undefined);
@@ -142,16 +188,16 @@ async function resolveGitDirectory(projectRoot: string): Promise<Result<string |
   }
 }
 
-function withUpdateContent(existing: string): Result<string> {
-  if (!isManagedHook(existing)) {
-    return ok(prependedHookContent(existing));
+function withUpdateContent(existing: HookReadResult): Result<string> {
+  if (!isManagedHook(existing.content)) {
+    return ok(prependedHookContent({ content: existing.content, mode: existing.mode }));
   }
 
-  if (!isPrependedHook(existing)) {
+  if (!isPrependedHook(existing.content)) {
     return ok(managedHookContent());
   }
 
-  const originalResult = extractOriginalFromPrepended(existing);
+  const originalResult = extractOriginalFromPrepended(existing.content);
   if (!originalResult.ok) {
     return err(originalResult.error);
   }
@@ -218,7 +264,7 @@ export async function isHookInstalled(projectRoot: string): Promise<boolean> {
     return false;
   }
 
-  return isManagedHook(contentResult.value);
+  return isManagedHook(contentResult.value.content);
 }
 
 export async function uninstallPreCommitHook(projectRoot: string): Promise<Result<void>> {
@@ -241,7 +287,7 @@ export async function uninstallPreCommitHook(projectRoot: string): Promise<Resul
     return ok(undefined);
   }
 
-  if (!isManagedHook(contentResult.value)) {
+  if (!isManagedHook(contentResult.value.content)) {
     return err(
       new AppError(
         ErrorCode.STORAGE_DELETE_ERROR,
@@ -250,13 +296,13 @@ export async function uninstallPreCommitHook(projectRoot: string): Promise<Resul
     );
   }
 
-  if (isPrependedHook(contentResult.value)) {
-    const originalResult = extractOriginalFromPrepended(contentResult.value);
+  if (isPrependedHook(contentResult.value.content)) {
+    const originalResult = extractOriginalFromPrepended(contentResult.value.content);
     if (!originalResult.ok) {
       return err(originalResult.error);
     }
-
-    return writeHook(preCommitPath, originalResult.value);
+    const restoreMode = originalResult.value.mode ?? contentResult.value.mode;
+    return writeHook(preCommitPath, originalResult.value.content, restoreMode);
   }
 
   try {

@@ -1,5 +1,6 @@
 import * as path from 'node:path';
 
+import { ENV_NAME_PATTERN } from '../constants.js';
 import { AppError, ErrorCode } from '../errors.js';
 import { err, ok, type Result } from '../result.js';
 import type { StorageAdapter } from '../storage/index.js';
@@ -20,12 +21,26 @@ function envltSecretRef(secretName: string): string {
   return `\${{ secrets.${secretName} }}`;
 }
 
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/gu, `'"'"'`)}'`;
+}
+
+function assertValidEnvName(envName: string): void {
+  if (!ENV_NAME_PATTERN.test(envName)) {
+    throw new AppError(
+      ErrorCode.ENVFILE_INVALID_ENV_NAME,
+      `Invalid environment name for workflow generation: ${envName}`,
+    );
+  }
+}
+
 function generateCheckStep(envName: string): string {
+  assertValidEnvName(envName);
   return [
     `      - name: Check environment variables (${envName})`,
     '        env:',
     `          ${ENVLT_SECRET_NAME}: ${envltSecretRef(ENVLT_SECRET_NAME)}`,
-    `        run: envlt check --env ${envName}`,
+    `        run: envlt check --env ${shellQuote(envName)}`,
   ].join('\n');
 }
 
@@ -69,11 +84,27 @@ export async function generateGithubActionsWorkflow(
   options: Partial<WorkflowOptions> = {},
 ): Promise<Result<void>> {
   const workflowPath = path.resolve(projectRoot, WORKFLOW_RELATIVE_PATH);
-  const workflowContent = generateWorkflowContent({
-    envs,
-    ...(options.workflowName !== undefined ? { workflowName: options.workflowName } : {}),
-    ...(options.nodeVersion !== undefined ? { nodeVersion: options.nodeVersion } : {}),
-  });
+  let workflowContent: string;
+
+  try {
+    workflowContent = generateWorkflowContent({
+      envs,
+      ...(options.workflowName !== undefined ? { workflowName: options.workflowName } : {}),
+      ...(options.nodeVersion !== undefined ? { nodeVersion: options.nodeVersion } : {}),
+    });
+  } catch (error: unknown) {
+    if (error instanceof AppError) {
+      return err(error);
+    }
+
+    return err(
+      new AppError(
+        ErrorCode.ENVFILE_INVALID_ENV_NAME,
+        'Invalid workflow generation options.',
+        error,
+      ),
+    );
+  }
 
   const writeResult = await adapter.write(workflowPath, Buffer.from(workflowContent, 'utf8'));
   if (!writeResult.ok) {

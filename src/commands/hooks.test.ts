@@ -48,7 +48,7 @@ afterEach(async () => {
   await fs.rm(projectRoot, { recursive: true, force: true });
 });
 
-void describe('commands/hooks', () => {
+void describe('commands/hooks', { concurrency: false }, () => {
   void it('does warn when install runs outside git repo', async () => {
     const result = await runHooksInstall({ projectRoot });
     assert.equal(result.ok, true);
