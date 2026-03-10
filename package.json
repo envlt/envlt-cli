@@ -36,14 +36,14 @@
     "inquirer": "13.3.0"
   },
   "devDependencies": {
-    "@types/node": "25.3.5",
+    "@types/node": "25.4.0",
     "@types/sinon": "21.0.0",
     "@typescript-eslint/eslint-plugin": "8.57.0",
     "@typescript-eslint/parser": "8.57.0",
     "c8": "11.0.0",
     "eslint": "10.0.3",
     "husky": "9.1.7",
-    "lint-staged": "16.3.2",
+    "lint-staged": "16.3.3",
     "prettier": "3.8.1",
     "sinon": "21.0.2",
     "tsx": "4.21.0",
