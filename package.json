@@ -2,11 +2,20 @@
   "name": "envlt",
   "version": "0.1.0",
   "type": "module",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "envlt": "./dist/bin/envlt.js"
   },
   "scripts": {
     "build": "tsc",
+    "prepack": "npm run build",
     "dev": "tsc --watch",
     "test": "node --import tsx --experimental-vm-modules --test 'src/**/*.test.ts' 'tests/**/*.test.ts'",
     "test:coverage": "c8 --include=src/** --exclude=**/*.test.ts --exclude=tests/** --exclude=scripts/** npm test",
