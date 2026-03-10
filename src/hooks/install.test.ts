@@ -54,6 +54,27 @@ void describe('hooks/install', () => {
     assert.equal(stats.mode & 0o777, 0o755);
   });
 
+  void it('does support gitdir pointer files', async () => {
+    const gitRoot = path.join(projectRoot, 'actual-git-dir');
+    await fs.mkdir(path.join(gitRoot, 'hooks'), { recursive: true });
+    await fs.rm(path.join(projectRoot, '.git'), { recursive: true, force: true });
+    await fs.writeFile(path.join(projectRoot, '.git'), `gitdir: ${gitRoot}\n`, 'utf8');
+
+    const result = expectOk(await installPreCommitHook({ projectRoot }));
+    assert.deepEqual(result, { status: 'installed' });
+
+    const content = await fs.readFile(path.join(gitRoot, 'hooks', 'pre-commit'), 'utf8');
+    assert.match(content, /envlt check/u);
+  });
+
+  void it('does fail when .git pointer file is malformed', async () => {
+    await fs.rm(path.join(projectRoot, '.git'), { recursive: true, force: true });
+    await fs.writeFile(path.join(projectRoot, '.git'), 'invalid-git-pointer\n', 'utf8');
+
+    const result = await installPreCommitHook({ projectRoot });
+    assert.equal(result.ok, false);
+  });
+
   void it('does skip when hook already exists and force is false', async () => {
     await installPreCommitHook({ projectRoot });
     const second = expectOk(await installPreCommitHook({ projectRoot }));
@@ -105,6 +126,21 @@ void describe('hooks/install', () => {
     assert.equal(after, true);
   });
 
+  void it('does return false for hook status when .git metadata is invalid', async () => {
+    await fs.rm(path.join(projectRoot, '.git'), { recursive: true, force: true });
+    await fs.writeFile(path.join(projectRoot, '.git'), 'broken-pointer\n', 'utf8');
+
+    const installed = await isHookInstalled(projectRoot);
+    assert.equal(installed, false);
+  });
+
+  void it('does return false for hook status when hook file cannot be read', async () => {
+    await fs.mkdir(hookPath(projectRoot), { recursive: true });
+
+    const installed = await isHookInstalled(projectRoot);
+    assert.equal(installed, false);
+  });
+
   void it('does uninstall envlt-managed hook', async () => {
     await installPreCommitHook({ projectRoot });
 
@@ -112,6 +148,21 @@ void describe('hooks/install', () => {
     assert.equal(uninstallResult.ok, true);
 
     await assert.rejects(fs.access(hookPath(projectRoot)));
+  });
+
+  void it('does return ok on uninstall when project is not a git repo', async () => {
+    await fs.rm(path.join(projectRoot, '.git'), { recursive: true, force: true });
+
+    const result = await uninstallPreCommitHook(projectRoot);
+    assert.equal(result.ok, true);
+  });
+
+  void it('does return error on uninstall when .git metadata is invalid', async () => {
+    await fs.rm(path.join(projectRoot, '.git'), { recursive: true, force: true });
+    await fs.writeFile(path.join(projectRoot, '.git'), 'broken-pointer\n', 'utf8');
+
+    const result = await uninstallPreCommitHook(projectRoot);
+    assert.equal(result.ok, false);
   });
 
   void it('does return ok when uninstall is called and hook does not exist', async () => {
@@ -136,7 +187,7 @@ void describe('hooks/install', () => {
 
   void it('does restore original hook on uninstall for prepended hooks', async () => {
     const fullPath = hookPath(projectRoot);
-    const original = '#!/bin/sh\necho custom-original\n';
+    const original = '#!/usr/bin/env bash\necho custom-original\n[[ 1 -eq 1 ]]\n';
     await fs.writeFile(fullPath, original, { mode: 0o755 });
 
     await installPreCommitHook({ projectRoot, force: true });
@@ -163,7 +214,7 @@ void describe('hooks/install', () => {
 
   void it('does prepend envlt check for force update of non-envlt hook', async () => {
     const fullPath = hookPath(projectRoot);
-    const original = '#!/bin/sh\necho custom-hook\n';
+    const original = '#!/usr/bin/env bash\necho custom-hook\n[[ 2 -gt 1 ]]\n';
     await fs.writeFile(fullPath, original, { mode: 0o755 });
 
     const result = expectOk(await installPreCommitHook({ projectRoot, force: true }));
@@ -171,9 +222,12 @@ void describe('hooks/install', () => {
     assert.deepEqual(result, { status: 'updated' });
     const content = await fs.readFile(fullPath, 'utf8');
     assert.ok(content.includes(PREPENDED_MARKER));
+    assert.match(content, /set -e/u);
     assert.match(content, new RegExp(HOOK_CMD, 'u'));
+    assert.match(content, /mktemp/u);
+    assert.match(content, /ENVLT_ORIGINAL_HOOK/u);
+    assert.match(content, /\[\[ 2 -gt 1 \]\]/u);
     assert.match(content, new RegExp(ORIGINAL_HOOK_MARKER, 'u'));
-    assert.match(content, /echo custom-hook/u);
   });
 
   void it('does preserve original hook when force is run on prepended hook repeatedly', async () => {

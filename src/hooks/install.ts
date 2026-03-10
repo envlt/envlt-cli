@@ -18,23 +18,17 @@ const HOOK_MODE = 0o755;
 const HOOK_MARKER = '# envlt:pre-commit';
 const PREPENDED_MARKER = '# envlt:pre-commit (prepended)';
 const ORIGINAL_HOOK_MARKER = '# Original hook follows:';
-const HOOK_RELATIVE_PATH = path.join('.git', 'hooks', 'pre-commit');
 const HOOK_HEADER = '#!/bin/sh';
 const HOOK_COMMAND = 'npx --no-install envlt check';
+const GITDIR_PREFIX = 'gitdir:';
+const PREPENDED_TMP_FILE = '.envlt-pre-commit.original.tmp';
+const HOOK_FILE_NAME = 'pre-commit';
 const HOOK_BODY_LINES = [
   HOOK_MARKER,
   '# This hook was installed by envlt. To uninstall: envlt hooks uninstall',
   'set -e',
   HOOK_COMMAND,
 ] as const;
-
-function hookPath(projectRoot: string): string {
-  return path.resolve(projectRoot, HOOK_RELATIVE_PATH);
-}
-
-function gitDirectoryPath(projectRoot: string): string {
-  return path.resolve(projectRoot, '.git');
-}
 
 function managedHookContent(): string {
   return `${HOOK_HEADER}\n${HOOK_BODY_LINES.join('\n')}\n`;
@@ -44,7 +38,15 @@ function prependedHookContent(originalContent: string): string {
   return [
     HOOK_HEADER,
     PREPENDED_MARKER,
+    'set -e',
     HOOK_COMMAND,
+    `__ENVLT_ORIGINAL_HOOK="$(mktemp "${PREPENDED_TMP_FILE}.XXXXXX")"`,
+    'cat > "$__ENVLT_ORIGINAL_HOOK" <<\'ENVLT_ORIGINAL_HOOK\'',
+    originalContent,
+    'ENVLT_ORIGINAL_HOOK',
+    'chmod 755 "$__ENVLT_ORIGINAL_HOOK"',
+    '"$__ENVLT_ORIGINAL_HOOK"',
+    'rm -f "$__ENVLT_ORIGINAL_HOOK"',
     '',
     ORIGINAL_HOOK_MARKER,
     originalContent,
@@ -105,6 +107,41 @@ async function readHookIfExists(filePath: string): Promise<Result<string | undef
   }
 }
 
+async function resolveGitDirectory(projectRoot: string): Promise<Result<string | undefined>> {
+  const gitEntryPath = path.resolve(projectRoot, '.git');
+  try {
+    const stat = await fs.stat(gitEntryPath);
+    if (stat.isDirectory()) {
+      return ok(gitEntryPath);
+    }
+
+    if (!stat.isFile()) {
+      return ok(undefined);
+    }
+
+    const pointer = await fs.readFile(gitEntryPath, 'utf8');
+    const firstLine = pointer.split(/\r?\n/u).at(0)?.trim() ?? '';
+    if (!firstLine.startsWith(GITDIR_PREFIX)) {
+      return err(new AppError(ErrorCode.STORAGE_READ_ERROR, 'Invalid .git file format.'));
+    }
+
+    const rawPath = firstLine.slice(GITDIR_PREFIX.length).trim();
+    if (rawPath === '') {
+      return err(new AppError(ErrorCode.STORAGE_READ_ERROR, 'Invalid .git file format.'));
+    }
+
+    return ok(path.resolve(projectRoot, rawPath));
+  } catch (error: unknown) {
+    if (isMissing(error)) {
+      return ok(undefined);
+    }
+
+    return err(
+      new AppError(ErrorCode.STORAGE_READ_ERROR, 'Failed to resolve .git directory.', error),
+    );
+  }
+}
+
 function withUpdateContent(existing: string): Result<string> {
   if (!isManagedHook(existing)) {
     return ok(prependedHookContent(existing));
@@ -122,23 +159,23 @@ function withUpdateContent(existing: string): Result<string> {
   return ok(prependedHookContent(originalResult.value));
 }
 
+function hookPathFromGitDirectory(gitDirectory: string): string {
+  return path.join(gitDirectory, 'hooks', HOOK_FILE_NAME);
+}
+
 export async function installPreCommitHook(
   options: HookInstallOptions,
 ): Promise<Result<HookInstallResult>> {
-  const gitPath = gitDirectoryPath(options.projectRoot);
-  try {
-    await fs.access(gitPath);
-  } catch (error: unknown) {
-    if (isMissing(error)) {
-      return ok({ status: 'skipped', reason: 'not_a_git_repo' });
-    }
-
-    return err(
-      new AppError(ErrorCode.STORAGE_READ_ERROR, 'Failed to access .git directory.', error),
-    );
+  const gitDirectoryResult = await resolveGitDirectory(options.projectRoot);
+  if (!gitDirectoryResult.ok) {
+    return err(gitDirectoryResult.error);
   }
 
-  const preCommitPath = hookPath(options.projectRoot);
+  if (gitDirectoryResult.value === undefined) {
+    return ok({ status: 'skipped', reason: 'not_a_git_repo' });
+  }
+
+  const preCommitPath = hookPathFromGitDirectory(gitDirectoryResult.value);
   const existing = await readHookIfExists(preCommitPath);
   if (!existing.ok) {
     return err(existing.error);
@@ -171,7 +208,12 @@ export async function installPreCommitHook(
 }
 
 export async function isHookInstalled(projectRoot: string): Promise<boolean> {
-  const contentResult = await readHookIfExists(hookPath(projectRoot));
+  const gitDirectoryResult = await resolveGitDirectory(projectRoot);
+  if (!gitDirectoryResult.ok || gitDirectoryResult.value === undefined) {
+    return false;
+  }
+
+  const contentResult = await readHookIfExists(hookPathFromGitDirectory(gitDirectoryResult.value));
   if (!contentResult.ok || contentResult.value === undefined) {
     return false;
   }
@@ -180,7 +222,16 @@ export async function isHookInstalled(projectRoot: string): Promise<boolean> {
 }
 
 export async function uninstallPreCommitHook(projectRoot: string): Promise<Result<void>> {
-  const preCommitPath = hookPath(projectRoot);
+  const gitDirectoryResult = await resolveGitDirectory(projectRoot);
+  if (!gitDirectoryResult.ok) {
+    return err(gitDirectoryResult.error);
+  }
+
+  if (gitDirectoryResult.value === undefined) {
+    return ok(undefined);
+  }
+
+  const preCommitPath = hookPathFromGitDirectory(gitDirectoryResult.value);
   const contentResult = await readHookIfExists(preCommitPath);
   if (!contentResult.ok) {
     return err(contentResult.error);

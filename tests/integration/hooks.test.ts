@@ -15,7 +15,21 @@ let isBuilt = false;
 async function runBuild(): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn('npm', ['run', 'build'], { cwd: REPO_ROOT, stdio: 'inherit' });
+    let settled = false;
+
+    child.on('error', (error: Error) => {
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    });
+
     child.on('close', (code: number | null) => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
       if (code === 0) {
         resolve();
         return;
@@ -37,6 +51,7 @@ async function runCli(
 
     let stdout = '';
     let stderr = '';
+    let settled = false;
 
     child.stdout.on('data', (chunk: Buffer) => {
       stdout += chunk.toString('utf8');
@@ -46,8 +61,19 @@ async function runCli(
       stderr += chunk.toString('utf8');
     });
 
+    child.on('error', (error: Error) => {
+      if (!settled) {
+        settled = true;
+        stderr += `${error.message}\n`;
+        resolve({ code: -1, stdout, stderr });
+      }
+    });
+
     child.on('close', (code: number | null) => {
-      resolve({ code: code ?? -1, stdout, stderr });
+      if (!settled) {
+        settled = true;
+        resolve({ code: code ?? -1, stdout, stderr });
+      }
     });
   });
 }
