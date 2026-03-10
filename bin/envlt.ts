@@ -8,6 +8,7 @@ import { readConfig } from '../src/config.js';
 import { runDeclare } from '../src/commands/declare.js';
 import { runEdit } from '../src/commands/edit.js';
 import { runInit } from '../src/commands/init.js';
+import { runHooksInstall, runHooksStatus, runHooksUninstall } from '../src/commands/hooks.js';
 import { runSet } from '../src/commands/set.js';
 import { runUse } from '../src/commands/use.js';
 import { DEFAULT_ENV, EXIT_CODES } from '../src/constants.js';
@@ -162,5 +163,40 @@ program
       process.exit(exitCode);
     },
   );
+
+const hooksProgram = program.command('hooks').description('Manage git hooks');
+
+hooksProgram
+  .command('install')
+  .option('--force', 'Overwrite or prepend hook when it already exists', false)
+  .action(async (opts: { force: boolean }) => {
+    const result = await runHooksInstall({
+      projectRoot: path.resolve(process.cwd()),
+      force: opts.force,
+    });
+
+    if (!result.ok) {
+      logger.error(result.error.message);
+      process.exit(EXIT_CODES.GENERAL_ERROR);
+    }
+  });
+
+hooksProgram.command('uninstall').action(async () => {
+  const result = await runHooksUninstall({ projectRoot: path.resolve(process.cwd()) });
+
+  if (!result.ok) {
+    logger.error(result.error.message);
+    process.exit(EXIT_CODES.GENERAL_ERROR);
+  }
+});
+
+hooksProgram.command('status').action(async () => {
+  const result = await runHooksStatus({ projectRoot: path.resolve(process.cwd()) });
+
+  if (!result.ok) {
+    logger.error(result.error.message);
+    process.exit(EXIT_CODES.GENERAL_ERROR);
+  }
+});
 
 program.parse();
