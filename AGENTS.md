@@ -136,3 +136,9 @@ A task is NOT done until:
 - [ ] All integration tests for new commands pass (real binary, real spawn)
 - [ ] No secrets, keys, or plaintext env values appear in any test fixture or snapshot
 - [ ] `git log --oneline` shows conventional commit messages
+
+## Code Review Notebook
+
+When user asks for a review, agent must follow:
+
+- `CODE_REVIEW_NOTEBOOK.md`
