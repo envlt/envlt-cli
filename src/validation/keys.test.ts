@@ -74,6 +74,20 @@ void describe('validation/keys', () => {
     });
   });
 
+  void it('does not warn when key exists in custom dictionary even if close to built-in key', () => {
+    assert.deepEqual(validateKey('STRIPE_PUBLIK_KEY', ['STRIPE_PUBLIK_KEY']), {
+      valid: true,
+      warnings: [],
+    });
+  });
+
+  void it('does suggest custom dictionary key for slight typos', () => {
+    assert.deepEqual(validateKey('PAYMNETS_TOKEN', ['PAYMENTS_TOKEN']), {
+      valid: true,
+      warnings: ['Suspicious key "PAYMNETS_TOKEN". Did you mean PAYMENTS_TOKEN?'],
+    });
+  });
+
   void it('does parse assignment for simple value', () => {
     assert.deepEqual(expectOk(parseAssignment('FOO=bar')), {
       key: 'FOO',

@@ -315,4 +315,121 @@ void describe('commands/check', () => {
     const result = await runCheck({ env: 'staging', projectRoot, exitOnFailure: false });
     assert.deepEqual(expectOk(result), []);
   });
+
+  void it('does return no pair violations when both required pair keys are set', async () => {
+    const key = generateKey();
+    const config: EnvltConfig = {
+      appName: 'check-test',
+      envs: ['staging'],
+      keyId: 'main',
+      requiredPairs: [['STRIPE_SECRET_KEY', 'STRIPE_PUBLIC_KEY']],
+    };
+    const adapter = createFilesystemAdapter(projectRoot);
+    expectOk(await writeConfig(config, projectRoot, adapter));
+    expectOk(await saveKey('main', key));
+
+    await writeManifestFile({ version: 1, entries: [] });
+    expectOk(
+      await writeEncEnv(
+        'staging',
+        { STRIPE_SECRET_KEY: 'sk_test', STRIPE_PUBLIC_KEY: 'pk_test' },
+        key,
+        projectRoot,
+        createFilesystemAdapter(projectRoot),
+      ),
+    );
+
+    const result = await runCheck({ env: 'staging', projectRoot, exitOnFailure: false });
+    assert.deepEqual(expectOk(result), []);
+  });
+
+  void it('does return missing_pair when only first required pair key is set', async () => {
+    const key = generateKey();
+    const config: EnvltConfig = {
+      appName: 'check-test',
+      envs: ['staging'],
+      keyId: 'main',
+      requiredPairs: [['STRIPE_SECRET_KEY', 'STRIPE_PUBLIC_KEY']],
+    };
+    const adapter = createFilesystemAdapter(projectRoot);
+    expectOk(await writeConfig(config, projectRoot, adapter));
+    expectOk(await saveKey('main', key));
+
+    await writeManifestFile({ version: 1, entries: [] });
+    expectOk(
+      await writeEncEnv(
+        'staging',
+        { STRIPE_SECRET_KEY: 'sk_test' },
+        key,
+        projectRoot,
+        createFilesystemAdapter(projectRoot),
+      ),
+    );
+
+    const errorStub = sinon.stub(logger, 'error');
+    const result = await runCheck({ env: 'staging', projectRoot, exitOnFailure: false });
+
+    assert.deepEqual(expectOk(result), [
+      {
+        type: 'missing_pair',
+        presentKey: 'STRIPE_SECRET_KEY',
+        missingKey: 'STRIPE_PUBLIC_KEY',
+      },
+    ]);
+    assert.equal(
+      errorStub.calledWith('✗ STRIPE_SECRET_KEY is set but STRIPE_PUBLIC_KEY is missing'),
+      true,
+    );
+  });
+
+  void it('does return missing_pair when only second required pair key is set', async () => {
+    const key = generateKey();
+    const config: EnvltConfig = {
+      appName: 'check-test',
+      envs: ['staging'],
+      keyId: 'main',
+      requiredPairs: [['STRIPE_SECRET_KEY', 'STRIPE_PUBLIC_KEY']],
+    };
+    const adapter = createFilesystemAdapter(projectRoot);
+    expectOk(await writeConfig(config, projectRoot, adapter));
+    expectOk(await saveKey('main', key));
+
+    await writeManifestFile({ version: 1, entries: [] });
+    expectOk(
+      await writeEncEnv(
+        'staging',
+        { STRIPE_PUBLIC_KEY: 'pk_test' },
+        key,
+        projectRoot,
+        createFilesystemAdapter(projectRoot),
+      ),
+    );
+
+    const result = await runCheck({ env: 'staging', projectRoot, exitOnFailure: false });
+
+    assert.deepEqual(expectOk(result), [
+      {
+        type: 'missing_pair',
+        presentKey: 'STRIPE_PUBLIC_KEY',
+        missingKey: 'STRIPE_SECRET_KEY',
+      },
+    ]);
+  });
+
+  void it('does return no pair violations when neither required pair key is set', async () => {
+    const key = generateKey();
+    const config: EnvltConfig = {
+      appName: 'check-test',
+      envs: ['staging'],
+      keyId: 'main',
+      requiredPairs: [['STRIPE_SECRET_KEY', 'STRIPE_PUBLIC_KEY']],
+    };
+    const adapter = createFilesystemAdapter(projectRoot);
+    expectOk(await writeConfig(config, projectRoot, adapter));
+    expectOk(await saveKey('main', key));
+
+    await writeManifestFile({ version: 1, entries: [] });
+    const result = await runCheck({ env: 'staging', projectRoot, exitOnFailure: false });
+    assert.deepEqual(expectOk(result), []);
+  });
 });

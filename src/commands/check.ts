@@ -1,11 +1,12 @@
 import { EXIT_CODES } from '../constants.js';
 import { readConfig } from '../config.js';
 import { readEncEnv, resolveEncEnvPath, type EnvVars } from '../envfile.js';
-import { err, ok, type Result } from '../result.js';
 import { loadKey } from '../keystore.js';
 import { logger } from '../logger.js';
-import { readManifest, validateManifest, type ManifestViolation } from '../manifest.js';
+import { readManifest, validateManifest } from '../manifest.js';
+import { err, ok, type Result } from '../result.js';
 import { createFilesystemAdapter } from '../storage/index.js';
+import { checkRequiredPairs } from '../validation/pairs.js';
 
 export type CheckOptions = {
   readonly env: string;
@@ -15,9 +16,12 @@ export type CheckOptions = {
   readonly exitOnFailure?: boolean;
 };
 
-export async function runCheck(
-  options: CheckOptions,
-): Promise<Result<readonly ManifestViolation[]>> {
+export type CheckViolation =
+  | { readonly type: 'missing_required'; readonly key: string }
+  | { readonly type: 'undeclared'; readonly key: string }
+  | { readonly type: 'missing_pair'; readonly presentKey: string; readonly missingKey: string };
+
+export async function runCheck(options: CheckOptions): Promise<Result<readonly CheckViolation[]>> {
   const adapter = createFilesystemAdapter(options.projectRoot);
   const configResult = await readConfig(options.projectRoot, adapter);
   if (!configResult.ok) {
@@ -54,12 +58,21 @@ export async function runCheck(
     vars = envResult.value;
   }
 
-  const violations = validateManifest(
+  const manifestViolations = validateManifest(
     manifestResult.value,
     vars,
     options.env,
     options.strict ?? false,
   );
+  const pairViolations = checkRequiredPairs(vars, configResult.value.requiredPairs ?? []);
+  const pairCheckViolations: readonly CheckViolation[] = pairViolations.map(
+    (violation): CheckViolation => ({
+      type: 'missing_pair',
+      presentKey: violation.presentKey,
+      missingKey: violation.missingKey,
+    }),
+  );
+  const violations: readonly CheckViolation[] = [...manifestViolations, ...pairCheckViolations];
 
   if (violations.length === 0) {
     logger.success('✓ All declared variables are set');
@@ -69,6 +82,11 @@ export async function runCheck(
   for (const violation of violations) {
     if (violation.type === 'missing_required') {
       logger.error(`✗ ${violation.key} — declared but not set`);
+      continue;
+    }
+
+    if (violation.type === 'missing_pair') {
+      logger.error(`✗ ${violation.presentKey} is set but ${violation.missingKey} is missing`);
       continue;
     }
 

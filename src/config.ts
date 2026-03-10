@@ -8,6 +8,7 @@ import {
 } from './constants.js';
 import { AppError, ErrorCode } from './errors.js';
 import { isObjectRecord } from './validation/guards.js';
+import { validateKey } from './validation/keys.js';
 import { err, ok, type Result } from './result.js';
 import type { StorageAdapter } from './storage/index.js';
 
@@ -38,6 +39,16 @@ function hasOnlyAllowedFields(raw: Record<string, unknown>): boolean {
   return Object.keys(raw).every((key) => ALLOWED_KEYS.has(key));
 }
 
+function isValidConfigKey(value: unknown): value is string {
+  return typeof value === 'string' && validateKey(value).valid;
+}
+
+function isValidCustomDictionary(value: unknown): value is readonly string[] {
+  return (
+    isStringArray(value) && value.every((entry) => entry.trim() !== '' && isValidConfigKey(entry))
+  );
+}
+
 function isValidRequiredPairs(value: unknown): value is readonly [string, string][] {
   return (
     Array.isArray(value) &&
@@ -45,8 +56,8 @@ function isValidRequiredPairs(value: unknown): value is readonly [string, string
       (entry) =>
         Array.isArray(entry) &&
         entry.length === 2 &&
-        typeof entry[0] === 'string' &&
-        typeof entry[1] === 'string',
+        isValidConfigKey(entry[0]) &&
+        isValidConfigKey(entry[1]),
     )
   );
 }
@@ -121,7 +132,7 @@ export function validateConfig(raw: unknown): Result<EnvltConfig> {
 
   let normalizedCustomDictionary: readonly string[] | undefined;
   if (customDictionary !== undefined) {
-    if (!isStringArray(customDictionary)) {
+    if (!isValidCustomDictionary(customDictionary)) {
       return err(configInvalidError());
     }
     normalizedCustomDictionary = customDictionary;
