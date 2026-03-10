@@ -1,6 +1,11 @@
 import * as path from 'node:path';
 
-import { CONFIG_FILE_NAME, ENV_NAME_PATTERN, KEY_ID_PATTERN } from './constants.js';
+import {
+  APP_NAME_MAX_LENGTH,
+  CONFIG_FILE_NAME,
+  ENV_NAME_PATTERN,
+  KEY_ID_PATTERN,
+} from './constants.js';
 import { AppError, ErrorCode } from './errors.js';
 import { isObjectRecord } from './validation/guards.js';
 import { err, ok, type Result } from './result.js';
@@ -15,7 +20,6 @@ export type EnvltConfig = {
   readonly keyId: string;
 };
 
-const APP_NAME_MAX_LENGTH = 64;
 const EXTENDS_ENTRY_PATTERN = /^github:[^/\s]+\/[^/\s]+\/.+$/u;
 const ALLOWED_KEYS = new Set([
   'appName',
