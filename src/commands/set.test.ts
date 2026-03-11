@@ -78,7 +78,7 @@ void describe('commands/set', () => {
   void it('does set a new variable in a non-existent file', async () => {
     const keyId = 'main';
     const key = generateKey();
-    expectOk(await saveKey(keyId, key));
+    expectOk(await saveKey(keyId, key, projectRoot));
     await writeMinimalConfig(projectRoot, keyId);
 
     expectOk(await runSet(['FOO=bar'], { env: 'test', projectRoot }));
@@ -91,7 +91,7 @@ void describe('commands/set', () => {
 
   void it('does update an existing variable without touching others', async () => {
     const key = generateKey();
-    expectOk(await saveKey('main', key));
+    expectOk(await saveKey('main', key, projectRoot));
     await writeMinimalConfig(projectRoot, 'main');
     expectOk(await runSet(['A=1', 'B=2'], { env: 'test', projectRoot }));
 
@@ -105,7 +105,7 @@ void describe('commands/set', () => {
 
   void it('does set multiple variables in one call', async () => {
     const key = generateKey();
-    expectOk(await saveKey('main', key));
+    expectOk(await saveKey('main', key, projectRoot));
     await writeMinimalConfig(projectRoot, 'main');
 
     expectOk(await runSet(['FOO=bar', 'BAZ=qux'], { env: 'test', projectRoot }));
@@ -117,7 +117,7 @@ void describe('commands/set', () => {
   });
 
   void it('does return SET_INVALID_ASSIGNMENT when assignment has no equals sign', async () => {
-    expectOk(await saveKey('main', generateKey()));
+    expectOk(await saveKey('main', generateKey(), projectRoot));
     await writeMinimalConfig(projectRoot, 'main');
 
     const result = await runSet(['INVALID'], { env: 'test', projectRoot });
@@ -125,7 +125,7 @@ void describe('commands/set', () => {
   });
 
   void it('does return SET_INVALID_ASSIGNMENT when assignment key is empty', async () => {
-    expectOk(await saveKey('main', generateKey()));
+    expectOk(await saveKey('main', generateKey(), projectRoot));
     await writeMinimalConfig(projectRoot, 'main');
 
     const result = await runSet(['=value'], { env: 'test', projectRoot });
@@ -134,7 +134,7 @@ void describe('commands/set', () => {
 
   void it('does round-trip set then readEncEnv with updated vars', async () => {
     const key = generateKey();
-    expectOk(await saveKey('main', key));
+    expectOk(await saveKey('main', key, projectRoot));
     await writeMinimalConfig(projectRoot, 'main');
 
     expectOk(await runSet(['HELLO=world'], { env: 'test', projectRoot }));
@@ -147,7 +147,7 @@ void describe('commands/set', () => {
 
   void it('does keep original file unchanged when atomic rename fails', async () => {
     const key = generateKey();
-    expectOk(await saveKey('main', key));
+    expectOk(await saveKey('main', key, projectRoot));
     await writeMinimalConfig(projectRoot, 'main');
     expectOk(await runSet(['FOO=original'], { env: 'test', projectRoot }));
 
@@ -169,7 +169,7 @@ void describe('commands/set', () => {
   });
 
   void it('does return ENVFILE_INVALID_ENV_NAME when env option is invalid', async () => {
-    expectOk(await saveKey('main', generateKey()));
+    expectOk(await saveKey('main', generateKey(), projectRoot));
     await writeMinimalConfig(projectRoot, 'main');
 
     const result = await runSet(['FOO=bar'], { env: 'INVALID', projectRoot });

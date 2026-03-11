@@ -129,7 +129,7 @@ function withDeps(
     keyGenerator: (): string => 'f'.repeat(64),
     now: (): number => 12345678,
     saveGeneratedKey: (keyId: string, key: string): Promise<Result<void>> =>
-      import('../keystore.js').then(({ saveKey }) => saveKey(keyId, key)),
+      import('../keystore.js').then(({ saveKey }) => saveKey(keyId, key, projectRoot)),
     writeStdout: (message: string): void => {
       writes.push(message);
     },
@@ -163,7 +163,7 @@ void describe('commands/init', () => {
     assert.deepEqual(configValue.envs, ['development', 'staging']);
     assert.equal(configValue.keyId, 'myapp-12345678');
 
-    const keyResult = await loadKey('myapp-12345678');
+    const keyResult = await loadKey('myapp-12345678', projectRoot);
     assert.equal(keyResult.ok, true);
 
     const envResult = expectOk(
@@ -284,7 +284,7 @@ void describe('commands/init', () => {
     const adapter = createFilesystemAdapter(projectRoot);
     const originalKey = 'a'.repeat(64);
     const saveOriginal = await import('../keystore.js').then(({ saveKey }) =>
-      saveKey('existing-key', originalKey),
+      saveKey('existing-key', originalKey, projectRoot),
     );
     assert.equal(saveOriginal.ok, true);
 
@@ -342,7 +342,7 @@ void describe('commands/init', () => {
     const adapter = createFilesystemAdapter(projectRoot);
     const existingKey = 'a'.repeat(64);
     const saveOriginal = await import('../keystore.js').then(({ saveKey }) =>
-      saveKey('existing-key', existingKey),
+      saveKey('existing-key', existingKey, projectRoot),
     );
     assert.equal(saveOriginal.ok, true);
 
@@ -430,7 +430,7 @@ void describe('commands/init', () => {
 
   void it('does generate a new key id when candidate already exists', async () => {
     const saveExisting = await import('../keystore.js').then(({ saveKey }) =>
-      saveKey('myapp-12345678', '0'.repeat(64)),
+      saveKey('myapp-12345678', '0'.repeat(64), projectRoot),
     );
     assert.equal(saveExisting.ok, true);
 

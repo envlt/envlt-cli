@@ -70,7 +70,7 @@ async function setupFixture(): Promise<string> {
 
   const adapter = createFilesystemAdapter(projectRoot);
   expectOk(await writeConfig(config, projectRoot, adapter));
-  expectOk(await saveKey('main', key));
+  expectOk(await saveKey('main', key, projectRoot));
   return key;
 }
 

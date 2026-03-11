@@ -10,12 +10,16 @@ import { decrypt } from '../crypto.js';
 import { ensureCachedRepo, type GitRunner } from './cache.js';
 import { parseExtendsEntry } from './types.js';
 
-async function resolveEntryKey(localKeyHex: string, keyId?: string): Promise<Result<string>> {
+async function resolveEntryKey(
+  localKeyHex: string,
+  keyId: string | undefined,
+  cachedRepoPath: string,
+): Promise<Result<string>> {
   if (keyId === undefined) {
     return ok(localKeyHex);
   }
 
-  const keyResult = await loadKey(keyId);
+  const keyResult = await loadKey(keyId, cachedRepoPath);
   if (!keyResult.ok) {
     return err(keyResult.error);
   }
@@ -51,7 +55,11 @@ async function loadSharedEntry(
     return cachedRepoResult;
   }
 
-  const keyResult = await resolveEntryKey(localKeyHex, parsedEntry.value.keyId);
+  const keyResult = await resolveEntryKey(
+    localKeyHex,
+    parsedEntry.value.keyId,
+    cachedRepoResult.value,
+  );
   if (!keyResult.ok) {
     return keyResult;
   }

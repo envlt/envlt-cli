@@ -47,7 +47,7 @@ export async function runUse(
   }
 
   const keyId = options.keyId ?? configResult.value.keyId;
-  const keyResult = await loadKey(keyId);
+  const keyResult = await loadKey(keyId, options.projectRoot);
   if (!keyResult.ok) {
     logger.error(keyResult.error.message);
     return EXIT_CODES.DECRYPTION_FAILED;

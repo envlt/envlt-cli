@@ -103,9 +103,9 @@ beforeEach(async () => {
   );
   await fs.writeFile(path.join(projectRoot, 'envlt.config.json'), `${configText}\n`, 'utf8');
 
-  const keysDir = path.join(tempHome, '.envlt', 'keys');
+  const keysDir = path.join(projectRoot, '.envlt', 'keys');
   await fs.mkdir(keysDir, { recursive: true, mode: 0o700 });
-  await fs.chmod(path.join(tempHome, '.envlt'), 0o700);
+  await fs.chmod(path.join(projectRoot, '.envlt'), 0o700);
   await fs.chmod(keysDir, 0o700);
   await fs.writeFile(path.join(keysDir, 'main'), KEY, { mode: 0o600 });
   await fs.chmod(path.join(keysDir, 'main'), 0o600);

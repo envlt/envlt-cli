@@ -30,7 +30,11 @@ type InitDependencies = {
   readonly createAdapter: (projectRoot: string) => StorageAdapter;
   readonly keyGenerator: () => string;
   readonly now: () => number;
-  readonly saveGeneratedKey: (keyId: string, key: string) => Promise<Result<void>>;
+  readonly saveGeneratedKey: (
+    keyId: string,
+    key: string,
+    projectRoot: string,
+  ) => Promise<Result<void>>;
   readonly writeStdout: (message: string) => void;
 };
 
@@ -204,11 +208,15 @@ async function importLocalEnv(
   return ok(assignments);
 }
 
-async function ensureUniqueKeyId(appName: string, baseNow: number): Promise<Result<string>> {
+async function ensureUniqueKeyId(
+  appName: string,
+  baseNow: number,
+  projectRoot: string,
+): Promise<Result<string>> {
   let offset = 0;
   while (offset < 1000) {
     const keyId = buildKeyId(appName, baseNow + offset);
-    const loadResult = await loadKey(keyId);
+    const loadResult = await loadKey(keyId, projectRoot);
     if (!loadResult.ok && loadResult.error.code === ErrorCode.KEYSTORE_KEY_NOT_FOUND) {
       return ok(keyId);
     }
@@ -281,7 +289,7 @@ async function loadExistingKeyMaterial(
     return err(configResult.error);
   }
 
-  const loadedKey = await loadKey(configResult.value.keyId);
+  const loadedKey = await loadKey(configResult.value.keyId, projectRoot);
   if (!loadedKey.ok) {
     return err(loadedKey.error);
   }
@@ -291,15 +299,16 @@ async function loadExistingKeyMaterial(
 
 async function generateKeyMaterial(
   appName: string,
+  projectRoot: string,
   dependencies: InitDependencies,
 ): Promise<Result<KeyMaterial>> {
   const key = dependencies.keyGenerator();
-  const keyIdResult = await ensureUniqueKeyId(appName, dependencies.now());
+  const keyIdResult = await ensureUniqueKeyId(appName, dependencies.now(), projectRoot);
   if (!keyIdResult.ok) {
     return err(keyIdResult.error);
   }
 
-  const saveResult = await dependencies.saveGeneratedKey(keyIdResult.value, key);
+  const saveResult = await dependencies.saveGeneratedKey(keyIdResult.value, key, projectRoot);
   if (!saveResult.ok) {
     return err(saveResult.error);
   }
@@ -321,7 +330,7 @@ async function resolveKeyMaterial(
 
   return hasExisting.value
     ? loadExistingKeyMaterial(projectRoot, adapter)
-    : generateKeyMaterial(appName, dependencies);
+    : generateKeyMaterial(appName, projectRoot, dependencies);
 }
 
 async function writeMissingEnvFiles(
@@ -359,18 +368,29 @@ async function writeMissingEnvFiles(
   return ok(undefined);
 }
 
-function printGeneratedKey(key: string, writeStdout: (message: string) => void): void {
+function printGeneratedKey(
+  key: string,
+  keyId: string,
+  writeStdout: (message: string) => void,
+): void {
   const message = [
     '─────────────────────────────────────────────────────',
-    '  Your master key (SAVE THIS — shown only once):',
+    '  Master key saved successfully!',
     '',
-    `  ENVLT_KEY=${key}`,
+    `  Location: .envlt/keys/${keyId}`,
     '',
-    '  Add this to your CI secrets and share securely',
-    '  with teammates using a password manager.',
+    '  To share with teammates:',
+    '    1. Archive the keys folder:',
+    '       zip -r envlt-keys.zip .envlt/',
+    '',
+    '    2. Send envlt-keys.zip securely via your password',
+    '       manager (1Password, LastPass, etc.)',
+    '',
+    '    3. Teammate extracts in their project root:',
+    '       unzip envlt-keys.zip',
+    '',
+    `  For CI, set secret ENVLT_KEY=${key}`,
     '─────────────────────────────────────────────────────',
-    '',
-    `To use in CI, set secret ENVLT_KEY=${key}`,
     '',
   ].join('\n');
 
@@ -485,7 +505,11 @@ export async function runInit(
   }
 
   if (keyMaterialResult.value.generated) {
-    printGeneratedKey(keyMaterialResult.value.key, dependencies.writeStdout);
+    printGeneratedKey(
+      keyMaterialResult.value.key,
+      keyMaterialResult.value.keyId,
+      dependencies.writeStdout,
+    );
   }
 
   const workflowResult = await maybeGenerateWorkflow(

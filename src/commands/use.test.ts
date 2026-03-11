@@ -73,7 +73,7 @@ async function setupFixture(): Promise<void> {
     throw writeConfigResult.error;
   }
 
-  const saveKeyResult = await saveKey('main', key);
+  const saveKeyResult = await saveKey('main', key, projectRoot);
   if (!saveKeyResult.ok) {
     throw saveKeyResult.error;
   }
@@ -217,7 +217,7 @@ void describe('commands/use', () => {
       throw configResult.error;
     }
 
-    const saveKeyResult = await saveKey('main', key);
+    const saveKeyResult = await saveKey('main', key, projectRoot);
     if (!saveKeyResult.ok) {
       throw saveKeyResult.error;
     }

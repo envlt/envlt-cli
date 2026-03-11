@@ -29,7 +29,7 @@ export async function runCheck(options: CheckOptions): Promise<Result<readonly C
   }
 
   const keyId = options.keyId ?? configResult.value.keyId;
-  const keyResult = await loadKey(keyId);
+  const keyResult = await loadKey(keyId, options.projectRoot);
   if (!keyResult.ok) {
     return err(keyResult.error);
   }

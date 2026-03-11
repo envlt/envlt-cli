@@ -37,8 +37,8 @@ This creates:
 
 - `envlt.config.json`
 - Encrypted env files for selected environments
-- A generated key in `~/.envlt/keys/`
-- `.gitignore` additions for local plaintext/temp files
+- A generated key in `.envlt/keys/` (local to project)
+- `.gitignore` additions for local plaintext/temp files and `.envlt/`
 
 Set variables:
 
@@ -116,11 +116,34 @@ With shared entries:
 `extends` entries are resolved from a local cache and merged in order. Later entries override
 earlier ones.
 
+## Sharing Keys with Team
+
+Master keys are stored locally in `.envlt/keys/` within your project (auto-added to `.gitignore`).
+
+To share the master key with teammates:
+
+1. **Archive the keys folder:**
+
+   ```bash
+   zip -r envlt-keys.zip .envlt/
+   ```
+
+2. **Send securely** via your password manager (1Password, LastPass, Bitwarden, etc.) or secure channel
+
+3. **Teammate extracts** in their project root:
+   ```bash
+   unzip envlt-keys.zip
+   ```
+
+The key is now available for the entire team without committing it to git.
+
+For CI/CD, set the `ENVLT_KEY` secret (shown during `envlt init`).
+
 ## Security Notes
 
 - Encryption algorithm: AES-256-GCM.
-- Master keys are stored in `~/.envlt/keys/`.
-- Key file permissions are validated and enforced.
+- Master keys are stored in `.envlt/keys/` within each project (not globally).
+- Key file permissions are validated and enforced (chmod 600).
 - Temporary plaintext files used by `edit` are protected and cleaned up.
 - `use` can run with isolated env (`--passthrough` is opt-in).
 

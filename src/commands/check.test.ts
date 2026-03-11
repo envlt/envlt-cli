@@ -41,7 +41,7 @@ async function setupConfigAndKey(keyId: string, keyHex: string): Promise<void> {
   };
   const adapter = createFilesystemAdapter(projectRoot);
   expectOk(await writeConfig(config, projectRoot, adapter));
-  expectOk(await saveKey(keyId, keyHex));
+  expectOk(await saveKey(keyId, keyHex, projectRoot));
 }
 
 async function writeManifestFile(manifest: Manifest): Promise<void> {
@@ -326,7 +326,7 @@ void describe('commands/check', () => {
     };
     const adapter = createFilesystemAdapter(projectRoot);
     expectOk(await writeConfig(config, projectRoot, adapter));
-    expectOk(await saveKey('main', key));
+    expectOk(await saveKey('main', key, projectRoot));
 
     await writeManifestFile({ version: 1, entries: [] });
     expectOk(
@@ -353,7 +353,7 @@ void describe('commands/check', () => {
     };
     const adapter = createFilesystemAdapter(projectRoot);
     expectOk(await writeConfig(config, projectRoot, adapter));
-    expectOk(await saveKey('main', key));
+    expectOk(await saveKey('main', key, projectRoot));
 
     await writeManifestFile({ version: 1, entries: [] });
     expectOk(
@@ -392,7 +392,7 @@ void describe('commands/check', () => {
     };
     const adapter = createFilesystemAdapter(projectRoot);
     expectOk(await writeConfig(config, projectRoot, adapter));
-    expectOk(await saveKey('main', key));
+    expectOk(await saveKey('main', key, projectRoot));
 
     await writeManifestFile({ version: 1, entries: [] });
     expectOk(
@@ -426,7 +426,7 @@ void describe('commands/check', () => {
     };
     const adapter = createFilesystemAdapter(projectRoot);
     expectOk(await writeConfig(config, projectRoot, adapter));
-    expectOk(await saveKey('main', key));
+    expectOk(await saveKey('main', key, projectRoot));
 
     await writeManifestFile({ version: 1, entries: [] });
     const result = await runCheck({ env: 'staging', projectRoot, exitOnFailure: false });
