@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { join } from 'node:path';
 
 import { EXIT_CODES } from '../constants.js';
 import { readConfig } from '../config.js';
@@ -19,11 +20,17 @@ export type UseOptions = {
 function createChildEnv(
   passthrough: boolean,
   decryptedVars: Readonly<Record<string, string>>,
+  projectRoot: string,
 ): NodeJS.ProcessEnv {
   const baseEnv: NodeJS.ProcessEnv = passthrough ? { ...process.env } : {};
   for (const [key, value] of Object.entries(decryptedVars)) {
     baseEnv[key] = value;
   }
+
+  // Add node_modules/.bin to PATH so npm scripts work
+  const nodeModulesBin = join(projectRoot, 'node_modules', '.bin');
+  const existingPath = baseEnv['PATH'] ?? process.env['PATH'] ?? '';
+  baseEnv['PATH'] = existingPath ? `${nodeModulesBin}:${existingPath}` : nodeModulesBin;
 
   return baseEnv;
 }
@@ -74,9 +81,9 @@ export async function runUse(
     }
   }
 
-  const childExitCode = await new Promise<number>((resolve) => {
+  return await new Promise<number>((resolve) => {
     const child = spawn(command[0], command.slice(1), {
-      env: createChildEnv(options.passthrough ?? false, mergedVars),
+      env: createChildEnv(options.passthrough ?? false, mergedVars, options.projectRoot),
       stdio: 'inherit',
     });
 
@@ -88,6 +95,4 @@ export async function runUse(
       resolve(EXIT_CODES.CHILD_PROCESS_ERROR);
     });
   });
-
-  return childExitCode;
 }
