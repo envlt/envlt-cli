@@ -91,12 +91,15 @@ void describe('integration/verbose-flag', () => {
     const seedResult = await runCli(['set', 'FOO=bar'], baseEnv);
     assert.equal(seedResult.code, 0);
 
-    const result = await runCli(['-v', 'use', '--', 'echo', 'test'], baseEnv);
+    const result = await runCli(
+      ['-v', 'use', '--', process.execPath, '-e', "console.log('test')"],
+      baseEnv,
+    );
 
     assert.equal(result.code, 0);
     assert.equal(result.stderr, '');
 
-    const debugIndex = result.stdout.indexOf('Spawning: echo');
+    const debugIndex = result.stdout.indexOf('Spawning:');
     const childIndex = result.stdout.indexOf('test');
     assert.notEqual(debugIndex, -1);
     assert.notEqual(childIndex, -1);
