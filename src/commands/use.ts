@@ -81,6 +81,8 @@ export async function runUse(
     }
   }
 
+  logger.debug(`Spawning: ${command[0]}`);
+
   return await new Promise<number>((resolve) => {
     const child = spawn(command[0], command.slice(1), {
       env: createChildEnv(options.passthrough ?? false, mergedVars, options.projectRoot),
