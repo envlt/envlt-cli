@@ -80,6 +80,24 @@ void describe('integration/verbose-flag', () => {
     assert.equal(result.stderr, '');
   });
 
+  void it('does show debug output for check when --verbose is provided', async () => {
+    const baseEnv = {
+      ...process.env,
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+      NO_COLOR: '1',
+    };
+
+    const seedResult = await runCli(['set', 'BAZ=qux'], baseEnv);
+    assert.equal(seedResult.code, 0);
+
+    const result = await runCli(['--verbose', 'check'], baseEnv);
+
+    assert.equal(result.code, 0);
+    assert.match(result.stdout, /Loaded \d+ variable\(s\) from \.env\.[a-z]+\.enc/u);
+    assert.equal(result.stderr, '');
+  });
+
   void it('does show debug output before child output for use with -v', async () => {
     const baseEnv = {
       ...process.env,
@@ -98,6 +116,10 @@ void describe('integration/verbose-flag', () => {
 
     assert.equal(result.code, 0);
     assert.equal(result.stderr, '');
+    assert.match(
+      result.stdout,
+      new RegExp(`Spawning: ${process.execPath.replace(/\\/gu, '\\\\')}`),
+    );
 
     const debugIndex = result.stdout.indexOf('Spawning:');
     const childIndex = result.stdout.indexOf('test');
