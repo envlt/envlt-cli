@@ -94,7 +94,7 @@ void describe('integration/verbose-flag', () => {
     const result = await runCli(['--verbose', 'check'], baseEnv);
 
     assert.equal(result.code, 0);
-    assert.match(result.stdout, /Loaded \d+ variable\(s\) from \.env\.[a-z]+\.enc/u);
+    assert.match(result.stdout, /Loaded 1 variable\(s\) from \.env\.development\.enc/u);
     assert.equal(result.stderr, '');
   });
 
@@ -116,10 +116,8 @@ void describe('integration/verbose-flag', () => {
 
     assert.equal(result.code, 0);
     assert.equal(result.stderr, '');
-    assert.match(
-      result.stdout,
-      new RegExp(`Spawning: ${process.execPath.replace(/\\/gu, '\\\\')}`),
-    );
+    const escapedPath = process.execPath.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+    assert.match(result.stdout, new RegExp(`Spawning: ${escapedPath}`));
 
     const debugIndex = result.stdout.indexOf('Spawning:');
     const childIndex = result.stdout.indexOf('test');
