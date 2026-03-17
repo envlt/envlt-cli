@@ -1,7 +1,7 @@
 import * as assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it, mock } from 'node:test';
 
-import { createLogger } from './logger.js';
+import { configure, createLogger, logger } from './logger.js';
 
 type WriteCall = readonly [string | Uint8Array];
 
@@ -53,6 +53,7 @@ beforeEach(() => {
 afterEach(() => {
   stdoutRestore();
   stderrRestore();
+  configure({});
 
   if (originalNoColor === undefined) {
     delete process.env['NO_COLOR'];
@@ -93,6 +94,17 @@ void describe('logger', () => {
     assert.deepEqual(stdoutWriteCalls, [['ok\n']]);
   });
 
+  void it('does allow color decision fallback to false when tty is enabled and NO_COLOR is unset', () => {
+    delete process.env['NO_COLOR'];
+    const restoreStdoutTty = setIsTty(process.stdout, true);
+    const logger = createLogger();
+
+    logger.info('plain');
+
+    restoreStdoutTty();
+    assert.deepEqual(stdoutWriteCalls, [['plain\n']]);
+  });
+
   void it('does use stderr tty state for color decisions', () => {
     const restoreStdoutTty = setIsTty(process.stdout, true);
     const restoreStderrTty = setIsTty(process.stderr, false);
@@ -110,8 +122,61 @@ void describe('logger', () => {
 
     logger.info('info');
     logger.success('success');
+
+    assert.deepEqual(stdoutWriteCalls, [['info\n'], ['success\n']]);
+  });
+
+  void it('does not write debug by default', () => {
+    const logger = createLogger({ noColor: true });
+
+    logger.debug('hidden');
+
+    assert.equal(stdoutWriteCalls.length, 0);
+  });
+
+  void it('does write debug when verbose is true', () => {
+    const logger = createLogger({ noColor: true, verbose: true });
+
+    logger.debug('visible');
+
+    assert.deepEqual(stdoutWriteCalls, [['visible\n']]);
+  });
+
+  void it('does write success and debug when color is explicitly enabled', () => {
+    const logger = createLogger({ noColor: false, verbose: true });
+
+    logger.success('ok');
+    logger.debug('dbg');
+
+    assert.equal(stdoutWriteCalls.length, 2);
+  });
+
+  void it('does route singleton logger calls through configure', () => {
+    configure({ noColor: true, verbose: true });
+
+    logger.info('info');
+    logger.success('success');
+    logger.warn('warn');
+    logger.error('error');
     logger.debug('debug');
 
     assert.deepEqual(stdoutWriteCalls, [['info\n'], ['success\n'], ['debug\n']]);
+    assert.deepEqual(stderrWriteCalls, [['warn\n'], ['error\n']]);
+  });
+
+  void it('does let quiet suppress singleton debug even when verbose is true', () => {
+    configure({ quiet: true, verbose: true, noColor: true });
+
+    logger.debug('suppressed');
+
+    assert.equal(stdoutWriteCalls.length, 0);
+  });
+
+  void it('does suppress debug even when verbose if quiet is true', () => {
+    const logger = createLogger({ quiet: true, verbose: true, noColor: true });
+
+    logger.debug('suppressed');
+
+    assert.equal(stdoutWriteCalls.length, 0);
   });
 });

@@ -131,6 +131,10 @@ export async function runSet(
     mergedVars[parsed.value.key] = parsed.value.value;
   }
 
+  logger.debug(
+    `Writing ${String(Object.keys(mergedVars).length)} variable(s) to ${encEnvFileName(options.env)}`,
+  );
+
   return writeEncEnvAtomically(
     options.env,
     mergedVars,

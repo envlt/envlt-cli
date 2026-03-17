@@ -1,6 +1,6 @@
 import { EXIT_CODES } from '../constants.js';
 import { readConfig } from '../config.js';
-import { readEncEnv, resolveEncEnvPath, type EnvVars } from '../envfile.js';
+import { encEnvFileName, readEncEnv, resolveEncEnvPath, type EnvVars } from '../envfile.js';
 import { loadKey } from '../keystore.js';
 import { logger } from '../logger.js';
 import { readManifest, validateManifest } from '../manifest.js';
@@ -57,6 +57,10 @@ export async function runCheck(options: CheckOptions): Promise<Result<readonly C
     }
     vars = envResult.value;
   }
+
+  logger.debug(
+    `Loaded ${String(Object.keys(vars).length)} variable(s) from ${encEnvFileName(options.env)}`,
+  );
 
   const manifestViolations = validateManifest(
     manifestResult.value,

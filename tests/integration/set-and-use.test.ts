@@ -96,6 +96,33 @@ void describe('integration/set-and-use', () => {
     assert.equal(useResult.stdout, 'bar|');
   });
 
+  void it('does show debug output only when verbose is enabled', async () => {
+    const baseEnv = {
+      ...process.env,
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+    };
+
+    const setDefaultResult = await runCli(['set', 'FOO=bar', '--env', 'test'], baseEnv);
+    assert.equal(setDefaultResult.code, 0);
+    assert.doesNotMatch(setDefaultResult.stdout, /Writing \d+ variable\(s\)/u);
+
+    const setVerboseResult = await runCli(
+      ['--verbose', 'set', 'BAR=baz', '--env', 'test'],
+      baseEnv,
+    );
+    assert.equal(setVerboseResult.code, 0);
+    assert.match(setVerboseResult.stdout, /Writing 2 variable\(s\) to \.env\.test\.enc/u);
+
+    const useVerboseResult = await runCli(
+      ['-v', 'use', '--env', 'test', '--', process.execPath, '-e', "process.stdout.write('1')"],
+      baseEnv,
+    );
+    assert.equal(useVerboseResult.code, 0);
+    assert.match(useVerboseResult.stdout, /Spawning: .*node/u);
+    assert.match(useVerboseResult.stdout, /1/u);
+  });
+
   void it('does fail when set receives invalid key format', async () => {
     const baseEnv = {
       ...process.env,

@@ -13,11 +13,19 @@ import { runSet } from '../src/commands/set.js';
 import { runSharedClearCache } from '../src/commands/shared.js';
 import { runUse } from '../src/commands/use.js';
 import { DEFAULT_ENV, EXIT_CODES } from '../src/constants.js';
-import { logger } from '../src/logger.js';
+import { configure, logger } from '../src/logger.js';
 import { createFilesystemAdapter } from '../src/storage/index.js';
 
 const program = new Command();
 program.name('envlt').description('Encrypted environment variable manager').version('0.1.0');
+
+program.option('-v, --verbose', 'Enable debug output', false);
+program.hook('preAction', () => {
+  const opts = program.opts<{ verbose: boolean }>();
+  if (opts.verbose) {
+    configure({ verbose: true });
+  }
+});
 
 program
   .command('set')
