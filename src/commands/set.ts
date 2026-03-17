@@ -118,6 +118,9 @@ export async function runSet(
   }
 
   const mergedVars: Record<string, string> = { ...existingVars.value };
+  const variableCount = Object.keys(mergedVars).length.toString();
+  logger.debug(`Writing ${variableCount} variable(s) to ${encEnvFileName(options.env)}`);
+
   for (const assignment of assignments) {
     const parsed = parseAssignment(assignment, configResult.value.customDictionary);
     if (!parsed.ok) {
