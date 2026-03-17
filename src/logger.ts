@@ -10,9 +10,10 @@ export interface Logger {
   debug(message: string): void;
 }
 
-type LoggerOptions = {
+export type LoggerOptions = {
   readonly quiet?: boolean;
   readonly noColor?: boolean;
+  readonly verbose?: boolean;
 };
 
 const COLOR_LEVELS: Readonly<Record<Exclude<LogLevel, 'info'>, (value: string) => string>> = {
@@ -40,6 +41,7 @@ function formatMessage(level: LogLevel, message: string, disableColor: boolean):
 
 export function createLogger(options?: LoggerOptions): Logger {
   const quiet = options?.quiet ?? false;
+  const verbose = options?.verbose ?? false;
 
   return {
     info(message: string): void {
@@ -63,7 +65,7 @@ export function createLogger(options?: LoggerOptions): Logger {
       process.stderr.write(`${formatMessage('error', message, disableColor)}\n`);
     },
     debug(message: string): void {
-      if (!quiet) {
+      if (!quiet && verbose) {
         const disableColor = shouldDisableColor(options, process.stdout.isTTY);
         process.stdout.write(`${formatMessage('debug', message, disableColor)}\n`);
       }
@@ -71,4 +73,26 @@ export function createLogger(options?: LoggerOptions): Logger {
   };
 }
 
-export const logger = createLogger();
+let _instance = createLogger();
+
+export function configure(opts: LoggerOptions): void {
+  _instance = createLogger(opts);
+}
+
+export const logger: Logger = {
+  info: (msg) => {
+    _instance.info(msg);
+  },
+  success: (msg) => {
+    _instance.success(msg);
+  },
+  warn: (msg) => {
+    _instance.warn(msg);
+  },
+  error: (msg) => {
+    _instance.error(msg);
+  },
+  debug: (msg) => {
+    _instance.debug(msg);
+  },
+};
