@@ -22,9 +22,7 @@ program.name('envlt').description('Encrypted environment variable manager').vers
 program.option('-v, --verbose', 'Enable debug output', false);
 program.hook('preAction', () => {
   const opts = program.opts<{ verbose: boolean }>();
-  if (opts.verbose) {
-    configure({ verbose: true });
-  }
+  configure({ verbose: opts.verbose });
 });
 
 program
