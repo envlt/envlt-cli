@@ -53,6 +53,7 @@ beforeEach(() => {
 afterEach(() => {
   stdoutRestore();
   stderrRestore();
+  configure({});
 
   if (originalNoColor === undefined) {
     delete process.env['NO_COLOR'];

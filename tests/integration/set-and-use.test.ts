@@ -96,6 +96,48 @@ void describe('integration/set-and-use', () => {
     assert.equal(useResult.stdout, 'bar|');
   });
 
+  void it('does not print debug output for set without verbose flag', async () => {
+    const baseEnv = {
+      ...process.env,
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+    };
+
+    const setResult = await runCli(['set', 'FOO=bar', '--env', 'test'], baseEnv);
+    assert.equal(setResult.code, 0);
+    assert.doesNotMatch(setResult.stdout, /Writing \d+ variable\(s\) to \.env\.test\.enc/u);
+  });
+
+  void it('does print debug output for set with verbose flag', async () => {
+    const baseEnv = {
+      ...process.env,
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+    };
+
+    const setResult = await runCli(['--verbose', 'set', 'FOO=bar', '--env', 'test'], baseEnv);
+    assert.equal(setResult.code, 0);
+    assert.match(setResult.stdout, /Writing 1 variable\(s\) to \.env\.test\.enc/u);
+  });
+
+  void it('does print debug output before child output for use with short verbose flag', async () => {
+    const baseEnv = {
+      ...process.env,
+      HOME: tempHome,
+      USERPROFILE: tempHome,
+    };
+
+    const setResult = await runCli(['set', 'FOO=bar', '--env', 'test'], baseEnv);
+    assert.equal(setResult.code, 0);
+
+    const useResult = await runCli(
+      ['-v', 'use', '--env', 'test', '--', 'node', '-e', 'console.log(1)'],
+      baseEnv,
+    );
+    assert.equal(useResult.code, 0);
+    assert.match(useResult.stdout, /^Spawning: node\n1\n$/u);
+  });
+
   void it('does fail when set receives invalid key format', async () => {
     const baseEnv = {
       ...process.env,
